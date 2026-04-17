@@ -68,6 +68,38 @@ Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: mac
 - Commit messages: one-line imperative summary, optional body. No emoji prefixes.
 - Tests must pass (`swift test`) before every commit.
 
+## Pull requests
+
+- **One logical change per PR.** No drive-by refactors, unrelated formatting churn, or bundled feature + cleanup. If you notice something worth fixing outside the PR's scope, open a follow-up.
+- **Branch naming**: short kebab-case describing the change — `reconnect-on-drop`, `sasl-auth`, `fix-pm-inspector`. No dates, no usernames, no ticket IDs unless there's an issue link.
+- **Title**: one-line imperative under 70 characters, matching the commit style. Examples: `Add SASL PLAIN authentication`, `Fix PM tabs losing focus on reconnect`. No `[WIP]`, no emoji prefixes, no conventional-commits `feat:` / `fix:` prefixes — we don't use them here.
+- **Body sections** (use these exact headings):
+
+  ```markdown
+  ## Summary
+  1–3 bullets on what this PR does and why.
+
+  ## Changes
+  Bulleted list of the concrete edits. Cite the most important file paths.
+
+  ## Test plan
+  - `swift build` — passes
+  - `swift test` — N tests pass (state the count)
+  - Manual verification steps for any UI change, each as a checklist item
+  - Screenshots or screen recordings for visible UI changes
+
+  ## Risk / rollback
+  Anything a reviewer should worry about, and how to revert if it breaks.
+  ```
+
+- **Screenshots required** for any change that alters the window chrome, sidebar, chat area, inspector, or any visible control. A recording is better than a screenshot for anything involving state transitions, selection, or animation.
+- **Test plan is mandatory.** Every PR includes one, even for docs or refactors (state "N/A, docs only" if truly nothing to test). For behaviour changes, the plan must include manual steps a reviewer can run, not just "I ran tests locally".
+- **CI must be green** before requesting review. Open as Draft if you're pushing work-in-progress; flip to Ready only when CI passes and the PR description is complete.
+- **Do not merge your own PR** unless it's a docs-only change or the user has explicitly said to. Default is: push, wait for review.
+- **Do not close issues from the PR body** unless the PR genuinely resolves the full issue. Use `Refs #N` for partial work, `Closes #N` only when the issue can actually be closed.
+- **Squash or rebase** is fine; no merge commits on `main`. Keep history linear.
+- **No AI attribution** anywhere — not in the title, not in the body, not in a trailer, not in a footer, not in commits on the branch. This repeats the commit rule because PR bodies are where agents most commonly break it.
+
 ## What not to do
 
 - Do not create `.app` bundles by hand — use `Scripts/build-app.sh`.
