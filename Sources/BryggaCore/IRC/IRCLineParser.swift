@@ -34,53 +34,27 @@
 import Foundation
 
 /// Result of parsing a single IRC protocol line.
-/// Pure value type — no dependencies on IRCClient or any Textual classes.
-@objc(IRCLineParserResult)
-final class IRCLineParserResult: NSObject {
-	@objc let tags: [String: String]
-	@objc let senderString: String?
-	@objc let command: String
-	@objc let commandNumeric: Int
-	@objc let params: [String]
-
-	/// Parsed sender components (nil if no sender prefix)
-	@objc let senderNickname: String?
-	@objc let senderUsername: String?
-	@objc let senderAddress: String?
-	@objc let senderIsServer: Bool
-
-	init(tags: [String: String],
-		 senderString: String?,
-		 command: String,
-		 commandNumeric: Int,
-		 params: [String],
-		 senderNickname: String?,
-		 senderUsername: String?,
-		 senderAddress: String?,
-		 senderIsServer: Bool)
-	{
-		self.tags = tags
-		self.senderString = senderString
-		self.command = command
-		self.commandNumeric = commandNumeric
-		self.params = params
-		self.senderNickname = senderNickname
-		self.senderUsername = senderUsername
-		self.senderAddress = senderAddress
-		self.senderIsServer = senderIsServer
-	}
+public struct IRCLineParserResult: Sendable, Equatable {
+	public let tags: [String: String]
+	public let senderString: String?
+	public let command: String
+	public let commandNumeric: Int
+	public let params: [String]
+	public let senderNickname: String?
+	public let senderUsername: String?
+	public let senderAddress: String?
+	public let senderIsServer: Bool
 }
 
 /// Pure Swift IRC line parser.
 /// Parses raw IRC protocol lines per RFC 1459 Section 2.3.1 with IRCv3 message tags.
 ///
 /// Line format: [@tags] [:prefix] <command> [params...] [:trailing]
-@objc(IRCLineParser)
-final class IRCLineParser: NSObject {
+public enum IRCLineParser {
 
 	/// Parse a raw IRC protocol line into its components.
 	/// Returns nil if the line is malformed (empty command, etc.)
-	@objc static func parse(_ line: String) -> IRCLineParserResult? {
+	public static func parse(_ line: String) -> IRCLineParserResult? {
 		guard !line.isEmpty else { return nil }
 
 		var remainder = Substring(line)
