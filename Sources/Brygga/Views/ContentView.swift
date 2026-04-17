@@ -98,11 +98,6 @@ struct ChannelRow: View {
 
 	var body: some View {
 		HStack {
-			Image(systemName: channel.isPrivateMessage ? "person.fill" : "number")
-				.font(.system(size: 10))
-				.foregroundStyle(.secondary)
-				.frame(width: 14)
-
 			Text(channel.name)
 				.lineLimit(1)
 
@@ -226,13 +221,17 @@ struct ChatView: View {
 			guard let channel = channel, !rest.isEmpty else { return }
 			channel.messages.append(Message(sender: sender, content: rest, kind: .action))
 			Task { try? await session.sendAction(to: channel.name, action: rest) }
-		case "MSG":
+		case "MSG", "QUERY":
 			let subs = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
-			if subs.count == 2 {
-				let target = String(subs[0])
-				let body = String(subs[1])
+			guard let first = subs.first else { return }
+			let target = String(first)
+			let body = subs.count > 1 ? String(subs[1]) : ""
+			let query = session.openQuery(target)
+			if !body.isEmpty {
+				query.messages.append(Message(sender: sender, content: body, kind: .privmsg))
 				Task { try? await session.sendMessage(to: target, content: body) }
 			}
+			appState.selection = query.id
 		default:
 			Task { try? await session.connection.send(String(text.dropFirst())) }
 		}

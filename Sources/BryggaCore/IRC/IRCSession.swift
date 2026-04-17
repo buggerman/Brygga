@@ -78,6 +78,18 @@ public final class IRCSession {
 		try await connection.send("PRIVMSG \(target) :\u{0001}ACTION \(action)\u{0001}")
 	}
 
+	/// Returns the channel object for the given target (channel name or nickname),
+	/// creating a new query tab if one doesn't exist.
+	@discardableResult
+	public func openQuery(_ target: String) -> Channel {
+		if let existing = server.channels.first(where: { $0.name == target }) {
+			return existing
+		}
+		let channel = Channel(name: target)
+		server.channels.append(channel)
+		return channel
+	}
+
 	public func setNickname(_ nickname: String) async throws {
 		try await connection.send("NICK \(nickname)")
 	}
