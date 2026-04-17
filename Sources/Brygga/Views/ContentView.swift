@@ -11,6 +11,8 @@ struct ContentView: View {
 	@Environment(AppState.self) private var appState
 
 	var body: some View {
+		@Bindable var appState = appState
+
 		NavigationSplitView {
 			SidebarView()
 				.navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
@@ -22,90 +24,243 @@ struct ContentView: View {
 				.navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 300)
 		}
 		.navigationSplitViewStyle(.balanced)
+		.sheet(isPresented: $appState.showingConnectSheet) {
+			ConnectSheet()
+				.environment(appState)
+		}
 	}
 }
 
-// MARK: - Placeholder views
+// MARK: - Sidebar
 
 struct SidebarView: View {
 	@Environment(AppState.self) private var appState
 
 	var body: some View {
-		VStack {
+		@Bindable var appState = appState
+
+		Group {
 			if appState.servers.isEmpty {
 				ContentUnavailableView {
 					Label("No Servers", systemImage: "network")
 				} description: {
 					Text("Add a server to get started.")
 				} actions: {
-					Button("Add Server\u{2026}") { }
+					Button("Add Server\u{2026}") {
+						appState.showingConnectSheet = true
+					}
 				}
 			} else {
-				List(selection: Binding(
-					get: { appState.selection },
-					set: { appState.selection = $0 }
-				)) {
-					Text("Server list goes here")
+				List(selection: $appState.selection) {
+					ForEach(appState.servers) { server in
+						ServerRow(server: server)
+							.tag(Optional(server.id))
+
+						ForEach(server.channels) { channel in
+							ChannelRow(channel: channel)
+								.tag(Optional(channel.id))
+								.padding(.leading, 12)
+						}
+					}
 				}
+				.listStyle(.sidebar)
 			}
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
 	}
 }
 
+struct ServerRow: View {
+	let server: Server
+
+	var body: some View {
+		HStack(spacing: 6) {
+			Circle()
+				.fill(stateColor)
+				.frame(width: 8, height: 8)
+			Text(server.name)
+				.font(.system(size: 12, weight: .semibold))
+		}
+	}
+
+	private var stateColor: Color {
+		switch server.state {
+		case .registered, .connected: return .green
+		case .connecting: return .yellow
+		case .disconnecting: return .orange
+		case .disconnected: return .gray
+		}
+	}
+}
+
+struct ChannelRow: View {
+	let channel: Channel
+
+	var body: some View {
+		HStack {
+			Image(systemName: channel.isPrivateMessage ? "person.fill" : "number")
+				.font(.system(size: 10))
+				.foregroundStyle(.secondary)
+				.frame(width: 14)
+
+			Text(channel.name)
+				.lineLimit(1)
+
+			Spacer()
+
+			if channel.highlightCount > 0 {
+				Text("\(channel.highlightCount)")
+					.font(.system(size: 10, weight: .bold))
+					.foregroundStyle(.white)
+					.padding(.horizontal, 6)
+					.padding(.vertical, 1)
+					.background(Capsule().fill(Color.red))
+			} else if channel.unreadCount > 0 {
+				Text("\(channel.unreadCount)")
+					.font(.system(size: 10, weight: .bold))
+					.foregroundStyle(.white)
+					.padding(.horizontal, 6)
+					.padding(.vertical, 1)
+					.background(Capsule().fill(Color.gray))
+			}
+		}
+	}
+}
+
+// MARK: - Chat
+
 struct ChatView: View {
 	@Environment(AppState.self) private var appState
+	@State private var draft: String = ""
 
 	var body: some View {
 		VStack(spacing: 0) {
 			if let channel = appState.selectedChannel {
-				// Topic bar
-				HStack {
-					Text(channel.name)
-						.font(.headline)
-					Text("—")
-						.foregroundStyle(.secondary)
-					Text(channel.topic.isEmpty ? "No topic set" : channel.topic)
-						.foregroundStyle(.secondary)
-						.lineLimit(1)
-					Spacer()
-				}
-				.padding(.horizontal, 12)
-				.padding(.vertical, 8)
-				.background(.regularMaterial)
+				TopicBar(channel: channel)
 
 				Divider()
 
-				// Message list
-				ScrollView {
-					LazyVStack(alignment: .leading, spacing: 2) {
-						ForEach(channel.messages) { message in
-							MessageRow(message: message)
-						}
-					}
-					.padding(12)
-				}
+				MessageList(channel: channel)
 
 				Divider()
 
-				// Input
-				HStack {
-					Text(appState.selectedServer?.nickname ?? "")
-						.foregroundStyle(.secondary)
-					Image(systemName: "chevron.right")
-						.foregroundStyle(.secondary)
-						.font(.system(size: 10))
-					TextField("Message", text: .constant(""))
-						.textFieldStyle(.plain)
-						.font(.system(.body, design: .monospaced))
+				InputBar(
+					nickname: appState.selectedServer?.nickname ?? "",
+					draft: $draft
+				) {
+					submit(channel: channel)
 				}
-				.padding(.horizontal, 12)
-				.padding(.vertical, 8)
 			} else {
 				ContentUnavailableView {
 					Label("No Channel Selected", systemImage: "bubble.left.and.bubble.right")
 				} description: {
 					Text("Select a channel from the sidebar to start chatting.")
+				}
+			}
+		}
+		.onChange(of: appState.selection) {
+			// Reset draft on channel switch.
+			draft = ""
+			// Mark channel as read.
+			if let channel = appState.selectedChannel {
+				channel.unreadCount = 0
+				channel.highlightCount = 0
+			}
+		}
+	}
+
+	private func submit(channel: Channel) {
+		let trimmed = draft.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty, let session = appState.selectedSession else { return }
+
+		let target = channel.name
+		let sender = appState.selectedServer?.nickname ?? ""
+
+		if trimmed.hasPrefix("/") {
+			handleSlash(trimmed, session: session, channel: channel, sender: sender)
+		} else {
+			let localEcho = Message(sender: sender, content: trimmed, kind: .privmsg)
+			channel.messages.append(localEcho)
+			Task {
+				try? await session.sendMessage(to: target, content: trimmed)
+			}
+		}
+		draft = ""
+	}
+
+	private func handleSlash(_ text: String, session: IRCSession, channel: Channel, sender: String) {
+		let parts = text.dropFirst().split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+		let command = parts.first.map { $0.uppercased() } ?? ""
+		let rest = parts.count > 1 ? String(parts[1]) : ""
+
+		switch command {
+		case "JOIN":
+			let name = rest.isEmpty ? channel.name : rest
+			Task { try? await session.join(name) }
+		case "PART":
+			Task { try? await session.part(rest.isEmpty ? channel.name : rest) }
+		case "NICK":
+			Task { try? await session.setNickname(rest) }
+		case "ME":
+			if !rest.isEmpty {
+				channel.messages.append(Message(sender: sender, content: rest, kind: .action))
+				Task { try? await session.sendAction(to: channel.name, action: rest) }
+			}
+		case "MSG":
+			let subs = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+			if subs.count == 2 {
+				let target = String(subs[0])
+				let body = String(subs[1])
+				Task { try? await session.sendMessage(to: target, content: body) }
+			}
+		default:
+			// Send raw line after the slash.
+			Task { try? await session.connection.send(String(text.dropFirst())) }
+		}
+	}
+}
+
+struct TopicBar: View {
+	let channel: Channel
+
+	var body: some View {
+		HStack {
+			Text(channel.name)
+				.font(.headline)
+			if !channel.topic.isEmpty {
+				Text("—")
+					.foregroundStyle(.secondary)
+				Text(channel.topic)
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+			}
+			Spacer()
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 8)
+		.background(.regularMaterial)
+	}
+}
+
+struct MessageList: View {
+	let channel: Channel
+
+	var body: some View {
+		ScrollViewReader { proxy in
+			ScrollView {
+				LazyVStack(alignment: .leading, spacing: 2) {
+					ForEach(channel.messages) { message in
+						MessageRow(message: message)
+							.id(message.id)
+					}
+				}
+				.padding(12)
+			}
+			.onChange(of: channel.messages.count) {
+				if let last = channel.messages.last {
+					withAnimation(.easeOut(duration: 0.1)) {
+						proxy.scrollTo(last.id, anchor: .bottom)
+					}
 				}
 			}
 		}
@@ -122,16 +277,68 @@ struct MessageRow: View {
 				.foregroundStyle(.secondary)
 				.frame(width: 52, alignment: .trailing)
 
-			Text(message.sender)
-				.font(.system(.body, design: .monospaced))
-				.foregroundStyle(Color.accentColor)
-
-			Text(message.content)
-				.font(.system(.body, design: .monospaced))
-				.frame(maxWidth: .infinity, alignment: .leading)
+			switch message.kind {
+			case .privmsg:
+				Text(message.sender)
+					.font(.system(.body, design: .monospaced))
+					.foregroundStyle(Color.accentColor)
+				Text(message.content)
+					.font(.system(.body, design: .monospaced))
+					.textSelection(.enabled)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			case .notice:
+				Text("-\(message.sender)-")
+					.font(.system(.body, design: .monospaced))
+					.foregroundStyle(.orange)
+				Text(message.content)
+					.font(.system(.body, design: .monospaced))
+					.foregroundStyle(.orange)
+					.textSelection(.enabled)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			case .action:
+				Text("*")
+					.foregroundStyle(.secondary)
+				Text("\(message.sender) \(message.content)")
+					.font(.system(.body, design: .monospaced))
+					.italic()
+					.frame(maxWidth: .infinity, alignment: .leading)
+			default:
+				Text("*")
+					.foregroundStyle(.secondary)
+				Text("\(message.sender) \(message.content)")
+					.font(.system(.body, design: .monospaced))
+					.foregroundStyle(.secondary)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			}
 		}
 	}
 }
+
+struct InputBar: View {
+	let nickname: String
+	@Binding var draft: String
+	let onSubmit: () -> Void
+
+	var body: some View {
+		HStack(spacing: 6) {
+			Text(nickname)
+				.foregroundStyle(.secondary)
+				.font(.system(.body, design: .monospaced))
+			Image(systemName: "chevron.right")
+				.foregroundStyle(.secondary)
+				.font(.system(size: 10))
+
+			TextField("Message", text: $draft)
+				.textFieldStyle(.plain)
+				.font(.system(.body, design: .monospaced))
+				.onSubmit(onSubmit)
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 8)
+	}
+}
+
+// MARK: - User list
 
 struct UserListView: View {
 	@Environment(AppState.self) private var appState
@@ -142,7 +349,10 @@ struct UserListView: View {
 				HStack {
 					Text(user.prefix)
 						.foregroundStyle(.secondary)
+						.font(.system(.body, design: .monospaced))
+						.frame(width: 10, alignment: .leading)
 					Text(user.nickname)
+						.font(.system(.body, design: .monospaced))
 				}
 			}
 		} else {

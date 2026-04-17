@@ -7,15 +7,22 @@
 import Foundation
 import Observation
 
-/// Root application state. Holds all servers, channels, and selection.
+/// Root application state. Holds all servers, sessions, and selection.
 /// SwiftUI views observe this directly.
+@MainActor
 @Observable
 public final class AppState {
 	/// Connected and disconnected servers.
 	public var servers: [Server] = []
 
+	/// Active IRC sessions keyed by `Server.id`.
+	public var sessions: [String: IRCSession] = [:]
+
 	/// Currently selected item (server or channel) identified by `id`.
 	public var selection: String?
+
+	/// Coordination flag for presenting the Connect Server sheet.
+	public var showingConnectSheet: Bool = false
 
 	public init() { }
 
@@ -43,5 +50,70 @@ public final class AppState {
 			}
 		}
 		return nil
+	}
+
+	/// The session for the currently selected server (or the server owning
+	/// the selected channel).
+	public var selectedSession: IRCSession? {
+		guard let server = selectedServer else { return nil }
+		return sessions[server.id]
+	}
+
+	// MARK: - Server lifecycle
+
+	/// Adds a server, creates and starts a session, and kicks off the
+	/// connection. Returns the newly-added Server.
+	@discardableResult
+	public func addServer(
+		name: String,
+		host: String,
+		port: UInt16 = 6697,
+		useTLS: Bool = true,
+		nickname: String
+	) -> Server {
+		let server = Server(
+			name: name.isEmpty ? host : name,
+			host: host,
+			port: Int(port),
+			useTLS: useTLS,
+			nickname: nickname
+		)
+		let connection = IRCConnection(
+			host: host,
+			port: port,
+			useTLS: useTLS,
+			nickname: nickname
+		)
+		let session = IRCSession(server: server, connection: connection)
+		session.start()
+
+		servers.append(server)
+		sessions[server.id] = session
+
+		Task {
+			do {
+				try await connection.connect()
+			} catch {
+				// Surface a server-level message in a future pass.
+				server.state = .disconnected
+			}
+		}
+
+		return server
+	}
+
+	/// Disconnects and removes a server.
+	public func removeServer(id: String) {
+		if let session = sessions[id] {
+			Task {
+				await session.connection.disconnect()
+				session.stop()
+			}
+		}
+		sessions.removeValue(forKey: id)
+		servers.removeAll(where: { $0.id == id })
+		if selection == id {
+			selection = nil
+		}
 	}
 }
