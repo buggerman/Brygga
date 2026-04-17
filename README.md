@@ -40,15 +40,40 @@ A raw `swift run Brygga` launches the binary as a background process — it will
 - Persistence across launches: servers, joined channels, open queries
 - Clean `QUIT` on app termination
 
-## Not yet implemented
+## Roadmap
 
-- Reconnect on socket drop
-- SASL / NickServ authentication
-- Preferences UI
-- Notifications
-- Scrollback persistence and history search
-- Multi-window / detachable tabs
-- Logging to disk
+The roadmap is directional, not a commitment. Scope and order will shift as the client gets used.
+
+### Near term — stabilize the daily-driver loop
+
+- Reconnect on socket drop, with backoff
+- SASL PLAIN + NickServ identification
+- Preferences window (servers, identity, appearance)
+- Highlight detection and macOS notifications, Dock badge
+- Scrollback persistence and disk logging
+- Nick completion (Tab) and input history (↑/↓)
+- `/list` channel browser
+
+### Medium term — polish and protocol depth
+
+- Detachable tabs (`Cmd+Shift+D` moves a channel to its own window)
+- Liquid Glass rendering on macOS 26
+- IRCv3 capability negotiation: `message-tags`, `server-time`, `account-tag`, `echo-message`, `batch`
+- Themeable message rendering
+- Away / idle state, channel modes UI
+- CTCP responses (VERSION, TIME, PING)
+
+### Longer term — stretch
+
+- `chathistory` and `message-redaction` IRCv3 extensions
+- Scripting or plugin surface
+- iCloud-synced server configuration
+- Unified mentions view across all servers
+
+### Explicitly out of scope
+
+- DCC file transfer
+- Objective-C or C interop — see [AGENTS.md](AGENTS.md)
 
 ## Architecture
 
