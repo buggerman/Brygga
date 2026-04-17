@@ -1,0 +1,76 @@
+/* *********************************************************************
+ *  Brygga — A modern IRC client for macOS
+ *  Copyright (c) 2026 Brygga contributors
+ *  BSD 3-Clause License
+ *********************************************************************** */
+
+import Foundation
+
+/// Loads and saves the list of configured servers to
+/// `~/Library/Application Support/Brygga/servers.json`.
+public enum ServerStore {
+
+	public struct ServerConfig: Codable, Equatable {
+		public var name: String
+		public var host: String
+		public var port: UInt16
+		public var useTLS: Bool
+		public var nickname: String
+		public var autoJoinChannels: [String]
+		public var openQueries: [String] = []
+
+		enum CodingKeys: String, CodingKey {
+			case name, host, port, useTLS, nickname, autoJoinChannels, openQueries
+		}
+
+		public init(from decoder: Decoder) throws {
+			let c = try decoder.container(keyedBy: CodingKeys.self)
+			name = try c.decode(String.self, forKey: .name)
+			host = try c.decode(String.self, forKey: .host)
+			port = try c.decode(UInt16.self, forKey: .port)
+			useTLS = try c.decode(Bool.self, forKey: .useTLS)
+			nickname = try c.decode(String.self, forKey: .nickname)
+			autoJoinChannels = try c.decode([String].self, forKey: .autoJoinChannels)
+			openQueries = try c.decodeIfPresent([String].self, forKey: .openQueries) ?? []
+		}
+
+		public init(name: String, host: String, port: UInt16, useTLS: Bool, nickname: String,
+		            autoJoinChannels: [String], openQueries: [String]) {
+			self.name = name
+			self.host = host
+			self.port = port
+			self.useTLS = useTLS
+			self.nickname = nickname
+			self.autoJoinChannels = autoJoinChannels
+			self.openQueries = openQueries
+		}
+	}
+
+	public struct Snapshot: Codable, Equatable {
+		public var servers: [ServerConfig]
+	}
+
+	public static func fileURL() -> URL {
+		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+		let dir = base.appendingPathComponent("Brygga", isDirectory: true)
+		try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		return dir.appendingPathComponent("servers.json")
+	}
+
+	public static func load() -> Snapshot {
+		let url = fileURL()
+		guard let data = try? Data(contentsOf: url) else {
+			return Snapshot(servers: [])
+		}
+		return (try? JSONDecoder().decode(Snapshot.self, from: data)) ?? Snapshot(servers: [])
+	}
+
+	public static func save(_ snapshot: Snapshot) {
+		let url = fileURL()
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+		guard let data = try? encoder.encode(snapshot) else { return }
+		try? data.write(to: url, options: .atomic)
+	}
+}

@@ -24,7 +24,60 @@ public final class AppState {
 	/// Coordination flag for presenting the Connect Server sheet.
 	public var showingConnectSheet: Bool = false
 
-	public init() { }
+	public init() {
+		restoreFromStore()
+	}
+
+	// MARK: - Persistence
+
+	private var isRestoring: Bool = false
+
+	private func restoreFromStore() {
+		let snapshot = ServerStore.load()
+		guard !snapshot.servers.isEmpty else { return }
+		isRestoring = true
+		defer { isRestoring = false }
+
+		for config in snapshot.servers {
+			let server = addServer(
+				name: config.name,
+				host: config.host,
+				port: config.port,
+				useTLS: config.useTLS,
+				nickname: config.nickname,
+				autoJoinChannels: config.autoJoinChannels
+			)
+			for nick in config.openQueries {
+				server.channels.append(Channel(name: nick))
+			}
+		}
+	}
+
+	private func snapshot() -> ServerStore.Snapshot {
+		let configs: [ServerStore.ServerConfig] = servers.map { server in
+			let joined = server.channels
+				.filter { $0.isJoined && !$0.isPrivateMessage }
+				.map { $0.name }
+			let queries = server.channels
+				.filter { $0.isPrivateMessage }
+				.map { $0.name }
+			return ServerStore.ServerConfig(
+				name: server.name,
+				host: server.host,
+				port: UInt16(server.port),
+				useTLS: server.useTLS,
+				nickname: server.nickname,
+				autoJoinChannels: joined,
+				openQueries: queries
+			)
+		}
+		return ServerStore.Snapshot(servers: configs)
+	}
+
+	private func persist() {
+		guard !isRestoring else { return }
+		ServerStore.save(snapshot())
+	}
 
 	/// Convenience: the channel that's currently selected, if any.
 	public var selectedChannel: Channel? {
@@ -69,7 +122,8 @@ public final class AppState {
 		host: String,
 		port: UInt16 = 6697,
 		useTLS: Bool = true,
-		nickname: String
+		nickname: String,
+		autoJoinChannels: [String] = []
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
@@ -85,6 +139,8 @@ public final class AppState {
 			nickname: nickname
 		)
 		let session = IRCSession(server: server, connection: connection)
+		session.autoJoinChannels = autoJoinChannels
+		session.onChannelsChanged = { [weak self] in self?.persist() }
 		session.start()
 
 		servers.append(server)
@@ -94,12 +150,25 @@ public final class AppState {
 			do {
 				try await connection.connect()
 			} catch {
-				// Surface a server-level message in a future pass.
 				server.state = .disconnected
 			}
 		}
 
+		persist()
 		return server
+	}
+
+	/// Sends QUIT and tears down every active session. Call this before
+	/// terminating the process so the server sees a clean client shutdown.
+	public func disconnectAll(quitMessage: String? = nil) async {
+		let snapshots = sessions.values.map { $0 }
+		await withTaskGroup(of: Void.self) { group in
+			for session in snapshots {
+				group.addTask {
+					await session.connection.disconnect(quitMessage: quitMessage)
+				}
+			}
+		}
 	}
 
 	/// Disconnects and removes a server.
@@ -115,5 +184,6 @@ public final class AppState {
 		if selection == id {
 			selection = nil
 		}
+		persist()
 	}
 }

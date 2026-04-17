@@ -20,6 +20,13 @@ public final class IRCSession {
 	public let server: Server
 	public let connection: IRCConnection
 
+	/// Channels to join automatically once the server registration completes.
+	public var autoJoinChannels: [String] = []
+
+	/// Invoked whenever the channel or join-state set changes — the UI can
+	/// subscribe to persist the change.
+	public var onChannelsChanged: (() -> Void)?
+
 	private var runTask: Task<Void, Never>?
 
 	public init(server: Server, connection: IRCConnection) {
@@ -87,6 +94,7 @@ public final class IRCSession {
 		}
 		let channel = Channel(name: target)
 		server.channels.append(channel)
+		onChannelsChanged?()
 		return channel
 	}
 
@@ -149,6 +157,9 @@ public final class IRCSession {
 		case 1:
 			server.state = .registered
 			appendServerLog(message)
+			for name in autoJoinChannels {
+				Task { try? await join(name) }
+			}
 		case 332:
 			handleTopicReply(message)
 		case 353:
@@ -202,6 +213,7 @@ public final class IRCSession {
 			} else {
 				channel = Channel(name: queryName)
 				server.channels.append(channel)
+				onChannelsChanged?()
 			}
 			channel.messages.append(msg)
 			channel.unreadCount += 1
@@ -238,6 +250,7 @@ public final class IRCSession {
 				server.channels.append(channel)
 			}
 			channel.isJoined = true
+			onChannelsChanged?()
 		} else {
 			guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
 			if !channel.users.contains(where: { $0.nickname == nick }) {
@@ -260,6 +273,7 @@ public final class IRCSession {
 		if isOwnMessage(nick) {
 			channel.isJoined = false
 			channel.users.removeAll()
+			onChannelsChanged?()
 		} else {
 			channel.users.removeAll(where: { $0.nickname == nick })
 			let text = reason.isEmpty ? "left \(channelName)" : "left \(channelName) (\(reason))"
@@ -317,6 +331,7 @@ public final class IRCSession {
 		if isOwnMessage(targetNick) {
 			channel.isJoined = false
 			channel.users.removeAll()
+			onChannelsChanged?()
 		} else {
 			channel.users.removeAll(where: { $0.nickname == targetNick })
 		}

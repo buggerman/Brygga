@@ -16,18 +16,26 @@ struct ContentView: View {
 		NavigationSplitView {
 			SidebarView()
 				.navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
-		} content: {
-			ChatView()
-				.navigationSplitViewColumnWidth(min: 400, ideal: 800)
 		} detail: {
-			UserListView()
-				.navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 300)
+			ChatView()
+				.inspector(isPresented: Binding(
+					get: { shouldShowUserList },
+					set: { _ in }
+				)) {
+					UserListView()
+						.inspectorColumnWidth(min: 160, ideal: 200, max: 300)
+				}
 		}
 		.navigationSplitViewStyle(.balanced)
 		.sheet(isPresented: $appState.showingConnectSheet) {
 			ConnectSheet()
 				.environment(appState)
 		}
+	}
+
+	private var shouldShowUserList: Bool {
+		guard let channel = appState.selectedChannel else { return false }
+		return !channel.isPrivateMessage
 	}
 }
 

@@ -9,6 +9,8 @@ import AppKit
 import BryggaCore
 
 final class BryggaAppDelegate: NSObject, NSApplicationDelegate {
+	weak var appState: AppState?
+
 	func applicationDidFinishLaunching(_ notification: Notification) {
 		NSApp.setActivationPolicy(.regular)
 		NSApp.activate(ignoringOtherApps: true)
@@ -16,6 +18,15 @@ final class BryggaAppDelegate: NSObject, NSApplicationDelegate {
 
 	func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
 		true
+	}
+
+	func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+		guard let appState = appState, !appState.sessions.isEmpty else { return .terminateNow }
+		Task { @MainActor in
+			await appState.disconnectAll(quitMessage: "Brygga")
+			NSApp.reply(toApplicationShouldTerminate: true)
+		}
+		return .terminateLater
 	}
 }
 
@@ -29,6 +40,7 @@ struct BryggaApp: App {
 			ContentView()
 				.environment(appState)
 				.frame(minWidth: 900, minHeight: 600)
+				.onAppear { appDelegate.appState = appState }
 		}
 		.windowStyle(.titleBar)
 		.commands {
