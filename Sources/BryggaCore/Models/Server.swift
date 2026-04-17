@@ -16,6 +16,7 @@ public final class Server: Identifiable {
 	public var useTLS: Bool
 	public var nickname: String
 	public var channels: [Channel] = []
+	public var messages: [Message] = []
 	public var state: ConnectionState = .disconnected
 	public var isExpanded: Bool = true
 

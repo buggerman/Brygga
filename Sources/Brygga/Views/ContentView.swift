@@ -137,31 +137,37 @@ struct ChatView: View {
 		VStack(spacing: 0) {
 			if let channel = appState.selectedChannel {
 				TopicBar(channel: channel)
-
 				Divider()
-
 				MessageList(channel: channel)
-
 				Divider()
-
 				InputBar(
 					nickname: appState.selectedServer?.nickname ?? "",
 					draft: $draft
 				) {
 					submit(channel: channel)
 				}
+			} else if let server = appState.selectedServer {
+				ServerConsoleHeader(server: server)
+				Divider()
+				ServerMessageList(server: server)
+				Divider()
+				InputBar(
+					nickname: server.nickname,
+					draft: $draft,
+					placeholder: "Type a command, e.g. /join #channel"
+				) {
+					submitServer(server: server)
+				}
 			} else {
 				ContentUnavailableView {
 					Label("No Channel Selected", systemImage: "bubble.left.and.bubble.right")
 				} description: {
-					Text("Select a channel from the sidebar to start chatting.")
+					Text("Select a server or channel from the sidebar to start chatting.")
 				}
 			}
 		}
 		.onChange(of: appState.selection) {
-			// Reset draft on channel switch.
 			draft = ""
-			// Mark channel as read.
 			if let channel = appState.selectedChannel {
 				channel.unreadCount = 0
 				channel.highlightCount = 0
@@ -173,7 +179,6 @@ struct ChatView: View {
 		let trimmed = draft.trimmingCharacters(in: .whitespaces)
 		guard !trimmed.isEmpty, let session = appState.selectedSession else { return }
 
-		let target = channel.name
 		let sender = appState.selectedServer?.nickname ?? ""
 
 		if trimmed.hasPrefix("/") {
@@ -182,30 +187,45 @@ struct ChatView: View {
 			let localEcho = Message(sender: sender, content: trimmed, kind: .privmsg)
 			channel.messages.append(localEcho)
 			Task {
-				try? await session.sendMessage(to: target, content: trimmed)
+				try? await session.sendMessage(to: channel.name, content: trimmed)
 			}
 		}
 		draft = ""
 	}
 
-	private func handleSlash(_ text: String, session: IRCSession, channel: Channel, sender: String) {
+	private func submitServer(server: Server) {
+		let trimmed = draft.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty, let session = appState.selectedSession else { return }
+
+		if trimmed.hasPrefix("/") {
+			handleSlash(trimmed, session: session, channel: nil, sender: server.nickname)
+		} else {
+			// Without a channel context, treat raw text as a raw IRC line.
+			Task { try? await session.connection.send(trimmed) }
+		}
+		draft = ""
+	}
+
+	private func handleSlash(_ text: String, session: IRCSession, channel: Channel?, sender: String) {
 		let parts = text.dropFirst().split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
 		let command = parts.first.map { $0.uppercased() } ?? ""
 		let rest = parts.count > 1 ? String(parts[1]) : ""
 
 		switch command {
 		case "JOIN":
-			let name = rest.isEmpty ? channel.name : rest
+			let name = rest.isEmpty ? (channel?.name ?? "") : rest
+			guard !name.isEmpty else { return }
 			Task { try? await session.join(name) }
 		case "PART":
-			Task { try? await session.part(rest.isEmpty ? channel.name : rest) }
+			let name = rest.isEmpty ? (channel?.name ?? "") : rest
+			guard !name.isEmpty else { return }
+			Task { try? await session.part(name) }
 		case "NICK":
 			Task { try? await session.setNickname(rest) }
 		case "ME":
-			if !rest.isEmpty {
-				channel.messages.append(Message(sender: sender, content: rest, kind: .action))
-				Task { try? await session.sendAction(to: channel.name, action: rest) }
-			}
+			guard let channel = channel, !rest.isEmpty else { return }
+			channel.messages.append(Message(sender: sender, content: rest, kind: .action))
+			Task { try? await session.sendAction(to: channel.name, action: rest) }
 		case "MSG":
 			let subs = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
 			if subs.count == 2 {
@@ -214,8 +234,64 @@ struct ChatView: View {
 				Task { try? await session.sendMessage(to: target, content: body) }
 			}
 		default:
-			// Send raw line after the slash.
 			Task { try? await session.connection.send(String(text.dropFirst())) }
+		}
+	}
+}
+
+struct ServerConsoleHeader: View {
+	let server: Server
+
+	var body: some View {
+		HStack {
+			Circle()
+				.fill(stateColor)
+				.frame(width: 8, height: 8)
+			Text(server.name)
+				.font(.headline)
+			Text(server.host)
+				.foregroundStyle(.secondary)
+			Spacer()
+			Text(server.nickname)
+				.foregroundStyle(.secondary)
+				.font(.system(.body, design: .monospaced))
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 8)
+		.background(.regularMaterial)
+	}
+
+	private var stateColor: Color {
+		switch server.state {
+		case .registered, .connected: return .green
+		case .connecting: return .yellow
+		case .disconnecting: return .orange
+		case .disconnected: return .gray
+		}
+	}
+}
+
+struct ServerMessageList: View {
+	let server: Server
+
+	var body: some View {
+		ScrollViewReader { proxy in
+			ScrollView {
+				LazyVStack(alignment: .leading, spacing: 2) {
+					ForEach(server.messages) { message in
+						MessageRow(message: message)
+							.id(message.id)
+					}
+				}
+				.padding(12)
+			}
+			.onChange(of: server.messages.count) {
+				if let last = server.messages.last {
+					withAnimation(.easeOut(duration: 0.1)) {
+						proxy.scrollTo(last.id, anchor: .bottom)
+					}
+				}
+			}
 		}
 	}
 }
@@ -317,6 +393,7 @@ struct MessageRow: View {
 struct InputBar: View {
 	let nickname: String
 	@Binding var draft: String
+	var placeholder: String = "Message"
 	let onSubmit: () -> Void
 
 	var body: some View {
@@ -328,7 +405,7 @@ struct InputBar: View {
 				.foregroundStyle(.secondary)
 				.font(.system(size: 10))
 
-			TextField("Message", text: $draft)
+			TextField(placeholder, text: $draft)
 				.textFieldStyle(.plain)
 				.font(.system(.body, design: .monospaced))
 				.onSubmit(onSubmit)

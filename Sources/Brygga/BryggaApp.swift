@@ -5,10 +5,23 @@
  *********************************************************************** */
 
 import SwiftUI
+import AppKit
 import BryggaCore
+
+final class BryggaAppDelegate: NSObject, NSApplicationDelegate {
+	func applicationDidFinishLaunching(_ notification: Notification) {
+		NSApp.setActivationPolicy(.regular)
+		NSApp.activate(ignoringOtherApps: true)
+	}
+
+	func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+		true
+	}
+}
 
 @main
 struct BryggaApp: App {
+	@NSApplicationDelegateAdaptor(BryggaAppDelegate.self) private var appDelegate
 	@State private var appState = AppState()
 
 	var body: some Scene {

@@ -101,8 +101,18 @@ public final class IRCSession {
 		case "NICK":    handleNick(message)
 		case "TOPIC":   handleTopic(message)
 		case "KICK":    handleKick(message)
-		default: break
+		default:
+			// Surface unhandled protocol traffic in the server console so users
+			// can see what the server is saying.
+			let text = "\(message.command) " + message.params.joined(separator: " ")
+			server.messages.append(Message(sender: "<<", content: text, kind: .server))
 		}
+	}
+
+	/// Logs an outgoing raw line to the server console and sends it.
+	public func sendRawEchoed(_ line: String) async throws {
+		server.messages.append(Message(sender: ">>", content: line, kind: .server))
+		try await connection.send(line)
 	}
 
 	// MARK: - State sync
@@ -126,6 +136,7 @@ public final class IRCSession {
 		switch message.commandNumeric {
 		case 1:
 			server.state = .registered
+			appendServerLog(message)
 		case 332:
 			handleTopicReply(message)
 		case 353:
@@ -133,8 +144,15 @@ public final class IRCSession {
 		case 366:
 			break
 		default:
-			break
+			appendServerLog(message)
 		}
+	}
+
+	private func appendServerLog(_ message: IRCLineParserResult) {
+		let sender = message.senderNickname ?? message.senderString ?? "server"
+		// Trailing param (if any) is usually the human-readable text.
+		let text = message.params.last ?? ""
+		server.messages.append(Message(sender: sender, content: text, kind: .server))
 	}
 
 	private func handlePrivmsg(_ message: IRCLineParserResult) {
@@ -189,6 +207,9 @@ public final class IRCSession {
 			if let channel = server.channels.first(where: { $0.name == target }) {
 				channel.messages.append(msg)
 			}
+		} else {
+			// Server / user-directed notice — show in the server console.
+			server.messages.append(msg)
 		}
 	}
 
