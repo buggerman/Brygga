@@ -98,9 +98,19 @@ public actor IRCConnection {
 	/// level. Observe `stateChanges` to know when `.active` is reached (after
 	/// the server sends 001 RPL_WELCOME).
 	public func connect() async throws {
-		guard case .disconnected = state else {
+		switch state {
+		case .disconnected, .failed:
+			break  // reconnect OK from these states
+		default:
 			throw ConnectionError.invalidState("cannot connect from \(state)")
 		}
+
+		// Reset leftover state from a prior session.
+		readTask?.cancel()
+		readTask = nil
+		connection?.cancel()
+		connection = nil
+		receiveBuffer.removeAll()
 
 		setState(.connecting)
 
@@ -234,8 +244,8 @@ public actor IRCConnection {
 			receiveBuffer.append(data)
 			drainBuffer()
 		}
-
-		messageContinuation.finish()
+		// Do NOT finish messageContinuation here — the stream must stay
+		// alive across reconnect cycles. It's only finished on deinit.
 	}
 
 	private func receiveChunk(_ conn: NWConnection) async throws -> Data? {

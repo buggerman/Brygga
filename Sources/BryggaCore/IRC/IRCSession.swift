@@ -27,6 +27,20 @@ public final class IRCSession {
 	/// subscribe to persist the change.
 	public var onChannelsChanged: (() -> Void)?
 
+	/// If true, the session automatically reconnects after unexpected drops
+	/// with exponential backoff. User-initiated disconnects (via `stop()`)
+	/// suppress reconnect regardless.
+	public var autoReconnect: Bool = true
+
+	/// Set when the user explicitly disconnects. Blocks auto-reconnect.
+	private var userDisconnected: Bool = false
+
+	/// Backoff attempt counter. Reset to zero on successful registration.
+	private var reconnectAttempt: Int = 0
+
+	/// Pending reconnect Task, so we can cancel it.
+	private var reconnectTask: Task<Void, Never>?
+
 	private var runTask: Task<Void, Never>?
 
 	public init(server: Server, connection: IRCConnection) {
@@ -59,6 +73,9 @@ public final class IRCSession {
 	}
 
 	public func stop() {
+		userDisconnected = true
+		reconnectTask?.cancel()
+		reconnectTask = nil
 		runTask?.cancel()
 		runTask = nil
 	}
@@ -141,6 +158,7 @@ public final class IRCSession {
 		switch state {
 		case .disconnected, .failed:
 			server.state = .disconnected
+			scheduleReconnectIfNeeded()
 		case .connecting:
 			server.state = .connecting
 		case .registering, .active:
@@ -150,12 +168,46 @@ public final class IRCSession {
 		}
 	}
 
+	private func scheduleReconnectIfNeeded() {
+		guard autoReconnect, !userDisconnected, reconnectTask == nil else { return }
+		// Exponential backoff: 1, 2, 4, 8, 16, 32, 60, 60…
+		let steps: [UInt64] = [1, 2, 4, 8, 16, 32, 60]
+		let seconds = steps[min(reconnectAttempt, steps.count - 1)]
+		reconnectAttempt += 1
+		server.messages.append(Message(
+			sender: "**",
+			content: "connection lost — reconnecting in \(seconds)s (attempt \(reconnectAttempt))",
+			kind: .server
+		))
+		reconnectTask = Task { [weak self] in
+			try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+			guard !Task.isCancelled else { return }
+			await self?.performReconnect()
+		}
+	}
+
+	private func performReconnect() async {
+		reconnectTask = nil
+		guard !userDisconnected else { return }
+		do {
+			try await connection.connect()
+		} catch {
+			server.messages.append(Message(
+				sender: "**",
+				content: "reconnect failed: \(error)",
+				kind: .server
+			))
+			scheduleReconnectIfNeeded()
+		}
+	}
+
 	// MARK: - Handlers
 
 	private func handleNumeric(_ message: IRCLineParserResult) {
 		switch message.commandNumeric {
 		case 1:
 			server.state = .registered
+			reconnectAttempt = 0
 			appendServerLog(message)
 			for name in autoJoinChannels {
 				Task { try? await join(name) }

@@ -162,6 +162,11 @@ public final class AppState {
 	/// terminating the process so the server sees a clean client shutdown.
 	public func disconnectAll(quitMessage: String? = nil) async {
 		let snapshots = sessions.values.map { $0 }
+		// Mark each session user-disconnected *before* tearing the socket down
+		// so the reconnect loop doesn't schedule itself in the gap.
+		for session in snapshots {
+			session.stop()
+		}
 		await withTaskGroup(of: Void.self) { group in
 			for session in snapshots {
 				group.addTask {
@@ -174,9 +179,9 @@ public final class AppState {
 	/// Disconnects and removes a server.
 	public func removeServer(id: String) {
 		if let session = sessions[id] {
+			session.stop()
 			Task {
 				await session.connection.disconnect()
-				session.stop()
 			}
 		}
 		sessions.removeValue(forKey: id)
