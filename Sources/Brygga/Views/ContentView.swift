@@ -242,6 +242,10 @@ struct ChatView: View {
 			Task { try? await session.part(name) }
 		case "NICK":
 			Task { try? await session.setNickname(rest) }
+		case "QUIT", "DISCONNECT":
+			// User-initiated — disable auto-reconnect and send QUIT cleanly.
+			let reason = rest.isEmpty ? nil : rest
+			Task { await session.disconnect(quitMessage: reason) }
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
 			channel.messages.append(Message(sender: sender, content: rest, kind: .action))
