@@ -7,6 +7,7 @@
 import SwiftUI
 import BryggaCore
 
+@MainActor
 struct ConnectSheet: View {
 	@Environment(AppState.self) private var appState
 	@Environment(\.dismiss) private var dismiss

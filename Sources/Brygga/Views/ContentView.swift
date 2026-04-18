@@ -7,6 +7,7 @@
 import SwiftUI
 import BryggaCore
 
+@MainActor
 struct ContentView: View {
 	@Environment(AppState.self) private var appState
 
@@ -132,6 +133,7 @@ struct ChannelRow: View {
 
 // MARK: - Chat
 
+@MainActor
 struct ChatView: View {
 	@Environment(AppState.self) private var appState
 	@State private var draft: String = ""
