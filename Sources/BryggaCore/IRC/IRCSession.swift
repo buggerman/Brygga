@@ -101,7 +101,7 @@ public final class IRCSession {
 			do {
 				try await self.connection.connect()
 			} catch {
-				self.server.messages.append(Message(
+				self.recordServer(Message(
 					sender: "**",
 					content: "reconnect failed: \(error)",
 					kind: .server
@@ -173,14 +173,36 @@ public final class IRCSession {
 			// Surface unhandled protocol traffic in the server console so users
 			// can see what the server is saying.
 			let text = "\(message.command) " + message.params.joined(separator: " ")
-			server.messages.append(Message(sender: "<<", content: text, kind: .server))
+			recordServer(Message(sender: "<<", content: text, kind: .server))
 		}
 	}
 
 	/// Logs an outgoing raw line to the server console and sends it.
 	public func sendRawEchoed(_ line: String) async throws {
-		server.messages.append(Message(sender: ">>", content: line, kind: .server))
+		recordServer(Message(sender: ">>", content: line, kind: .server))
 		try await connection.send(line)
+	}
+
+	// MARK: - Scrollback
+
+	/// Persist-through append for a channel message. UI and disk scrollback
+	/// stay in sync.
+	public func record(_ message: Message, in channel: Channel) {
+		channel.messages.append(message)
+		let sid = server.id
+		let target = channel.name
+		Task {
+			await ScrollbackStore.shared.append(serverId: sid, target: target, message: message)
+		}
+	}
+
+	/// Persist-through append for the server console.
+	public func recordServer(_ message: Message) {
+		server.messages.append(message)
+		let sid = server.id
+		Task {
+			await ScrollbackStore.shared.append(serverId: sid, target: "__server__", message: message)
+		}
 	}
 
 	// MARK: - State sync
@@ -205,7 +227,7 @@ public final class IRCSession {
 		let steps: [UInt64] = [1, 2, 4, 8, 16, 32, 60]
 		let seconds = steps[min(reconnectAttempt, steps.count - 1)]
 		reconnectAttempt += 1
-		server.messages.append(Message(
+		recordServer(Message(
 			sender: "**",
 			content: "connection lost — reconnecting in \(seconds)s (attempt \(reconnectAttempt))",
 			kind: .server
@@ -223,7 +245,7 @@ public final class IRCSession {
 		do {
 			try await connection.connect()
 		} catch {
-			server.messages.append(Message(
+			recordServer(Message(
 				sender: "**",
 				content: "reconnect failed: \(error)",
 				kind: .server
@@ -266,7 +288,7 @@ public final class IRCSession {
 		let sender = message.senderNickname ?? message.senderString ?? "server"
 		// Trailing param (if any) is usually the human-readable text.
 		let text = message.params.last ?? ""
-		server.messages.append(Message(sender: sender, content: text, kind: .server))
+		recordServer(Message(sender: sender, content: text, kind: .server))
 	}
 
 	private func handlePrivmsg(_ message: IRCLineParserResult) {
@@ -290,7 +312,7 @@ public final class IRCSession {
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
-				channel.messages.append(msg)
+				record(msg, in: channel)
 				if !isOwnMessage(sender) {
 					channel.unreadCount += 1
 				}
@@ -306,7 +328,7 @@ public final class IRCSession {
 				server.channels.append(channel)
 				onChannelsChanged?()
 			}
-			channel.messages.append(msg)
+			record(msg, in: channel)
 			channel.unreadCount += 1
 		}
 	}
@@ -320,11 +342,11 @@ public final class IRCSession {
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
-				channel.messages.append(msg)
+				record(msg, in: channel)
 			}
 		} else {
 			// Server / user-directed notice — show in the server console.
-			server.messages.append(msg)
+			recordServer(msg)
 		}
 	}
 
@@ -350,7 +372,7 @@ public final class IRCSession {
 				user.hostname = message.senderAddress
 				channel.users.append(user)
 			}
-			channel.messages.append(Message(sender: nick, content: "joined \(channelName)", kind: .join))
+			record(Message(sender: nick, content: "joined \(channelName)", kind: .join), in: channel)
 		}
 	}
 
@@ -368,7 +390,7 @@ public final class IRCSession {
 		} else {
 			channel.users.removeAll(where: { $0.nickname == nick })
 			let text = reason.isEmpty ? "left \(channelName)" : "left \(channelName) (\(reason))"
-			channel.messages.append(Message(sender: nick, content: text, kind: .part))
+			record(Message(sender: nick, content: text, kind: .part), in: channel)
 		}
 	}
 
@@ -379,7 +401,7 @@ public final class IRCSession {
 		for channel in server.channels where channel.users.contains(where: { $0.nickname == nick }) {
 			channel.users.removeAll(where: { $0.nickname == nick })
 			let text = reason.isEmpty ? "quit" : "quit (\(reason))"
-			channel.messages.append(Message(sender: nick, content: text, kind: .quit))
+			record(Message(sender: nick, content: text, kind: .quit), in: channel)
 		}
 	}
 
@@ -394,7 +416,7 @@ public final class IRCSession {
 		for channel in server.channels {
 			if let user = channel.users.first(where: { $0.nickname == oldNick }) {
 				user.nickname = newNick
-				channel.messages.append(Message(sender: oldNick, content: "is now known as \(newNick)", kind: .nick))
+				record(Message(sender: oldNick, content: "is now known as \(newNick)", kind: .nick), in: channel)
 			}
 		}
 	}
@@ -407,7 +429,7 @@ public final class IRCSession {
 
 		guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
 		channel.topic = topic
-		channel.messages.append(Message(sender: nick, content: "changed topic to: \(topic)", kind: .topic))
+		record(Message(sender: nick, content: "changed topic to: \(topic)", kind: .topic), in: channel)
 	}
 
 	private func handleKick(_ message: IRCLineParserResult) {
@@ -430,7 +452,7 @@ public final class IRCSession {
 		let text = reason.isEmpty
 			? "\(kicker) kicked \(targetNick) from \(channelName)"
 			: "\(kicker) kicked \(targetNick) from \(channelName) (\(reason))"
-		channel.messages.append(Message(sender: kicker, content: text, kind: .kick))
+		record(Message(sender: kicker, content: text, kind: .kick), in: channel)
 	}
 
 	private func handleTopicReply(_ message: IRCLineParserResult) {

@@ -53,7 +53,7 @@ public final class User: Identifiable {
 	}
 }
 
-public struct Message: Identifiable, Sendable {
+public struct Message: Identifiable, Sendable, Codable {
 	public let id: UUID
 	public let timestamp: Date
 	public let sender: String
@@ -68,7 +68,7 @@ public struct Message: Identifiable, Sendable {
 		self.kind = kind
 	}
 
-	public enum Kind: Sendable {
+	public enum Kind: String, Sendable, Codable {
 		case privmsg
 		case notice
 		case action       // /me

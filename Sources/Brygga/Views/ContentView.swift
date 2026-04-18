@@ -205,7 +205,7 @@ struct ChatView: View {
 			handleSlash(trimmed, session: session, channel: channel, sender: sender)
 		} else {
 			let localEcho = Message(sender: sender, content: trimmed, kind: .privmsg)
-			channel.messages.append(localEcho)
+			session.record(localEcho, in: channel)
 			Task {
 				try? await session.sendMessage(to: channel.name, content: trimmed)
 			}
@@ -248,7 +248,7 @@ struct ChatView: View {
 			Task { await session.disconnect(quitMessage: reason) }
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
-			channel.messages.append(Message(sender: sender, content: rest, kind: .action))
+			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)
 			Task { try? await session.sendAction(to: channel.name, action: rest) }
 		case "MSG", "QUERY":
 			let subs = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
@@ -257,7 +257,7 @@ struct ChatView: View {
 			let body = subs.count > 1 ? String(subs[1]) : ""
 			let query = session.openQuery(target)
 			if !body.isEmpty {
-				query.messages.append(Message(sender: sender, content: body, kind: .privmsg))
+				session.record(Message(sender: sender, content: body, kind: .privmsg), in: query)
 				Task { try? await session.sendMessage(to: target, content: body) }
 			}
 			appState.selection = query.id

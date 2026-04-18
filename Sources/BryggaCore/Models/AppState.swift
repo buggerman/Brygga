@@ -52,6 +52,25 @@ public final class AppState {
 			for nick in config.openQueries {
 				server.channels.append(Channel(name: nick))
 			}
+			// Rehydrate scrollback for server console + every known channel.
+			Task { [server] in
+				let serverMessages = await ScrollbackStore.shared.load(
+					serverId: server.id,
+					target: "__server__"
+				)
+				await MainActor.run {
+					server.messages.insert(contentsOf: serverMessages, at: 0)
+				}
+				for channel in server.channels {
+					let msgs = await ScrollbackStore.shared.load(
+						serverId: server.id,
+						target: channel.name
+					)
+					await MainActor.run {
+						channel.messages.insert(contentsOf: msgs, at: 0)
+					}
+				}
+			}
 		}
 	}
 
