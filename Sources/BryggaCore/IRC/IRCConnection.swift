@@ -195,7 +195,24 @@ public actor IRCConnection {
 
 	// MARK: - Private lifecycle
 
-	private var saslInProgress: Bool = false
+	/// Caps we ask for during CAP LS. Servers that support them will include
+	/// them in their LS response; we then request the intersection.
+	private static let desiredCaps: Set<String> = [
+		"sasl",
+		"server-time",
+		"multi-prefix",
+		"userhost-in-names",
+		"chghost",
+		"account-tag",
+		"account-notify",
+		"away-notify",
+		"invite-notify",
+		"batch",
+	]
+
+	public private(set) var enabledCaps: Set<String> = []
+	private var supportedCaps: Set<String> = []
+	private var capNegotiationActive: Bool = false
 
 	private var useSasl: Bool {
 		guard let account = saslAccount, !account.isEmpty,
@@ -205,10 +222,12 @@ public actor IRCConnection {
 
 	private func onReady() async {
 		setState(.registering)
-		if useSasl {
-			saslInProgress = true
-			try? await send("CAP LS 302")
-		}
+		// Always negotiate capabilities, even without SASL creds — we want
+		// server-time, multi-prefix, away-notify, etc. regardless.
+		capNegotiationActive = true
+		supportedCaps = []
+		enabledCaps = []
+		try? await send("CAP LS 302")
 		try? await send("NICK \(nickname)")
 		try? await send("USER \(username) 0 * :\(realName)")
 		startReadLoop()
@@ -300,11 +319,13 @@ public actor IRCConnection {
 			}
 
 			if let parsed = IRCLineParser.parse(text) {
-				// Drive SASL handshake internally; still yield the lines so the
-				// UI's server console can log them.
-				if saslInProgress {
-					handleSaslLine(parsed)
+				// Drive capability + SASL handshake internally; still yield the
+				// lines so the UI's server console can log them.
+				if capNegotiationActive {
+					handleCapLine(parsed)
 				}
+				// Post-registration CAP NEW / CAP DEL always tracked.
+				handleCapUpdate(parsed)
 				// Registration complete when 001 (RPL_WELCOME) arrives.
 				if parsed.commandNumeric == 1 && state == .registering {
 					setState(.active)
@@ -314,39 +335,23 @@ public actor IRCConnection {
 		}
 	}
 
-	private func handleSaslLine(_ msg: IRCLineParserResult) {
+	/// Pre-001 CAP negotiation. Drives LS → REQ → ACK → (optional SASL) → END.
+	private func handleCapLine(_ msg: IRCLineParserResult) {
 		switch msg.command {
 		case "CAP":
-			// Params: [target, subcommand, ...data]
 			guard msg.params.count >= 2 else { return }
 			let subcommand = msg.params[1].uppercased()
 			switch subcommand {
 			case "LS":
-				// Caps list is either params[2] (single) or params[3] (multi-line "*" marker).
-				let capsField = msg.params.last ?? ""
-				let caps = capsField.split(separator: " ").map {
-					String($0.split(separator: "=").first ?? "")
-				}
-				if caps.contains("sasl") {
-					Task { [weak self] in try? await self?.send("CAP REQ :sasl") }
-				} else {
-					// Server doesn't support SASL; close caps and continue unauthenticated.
-					Task { [weak self] in try? await self?.send("CAP END") }
-					saslInProgress = false
-				}
+				handleCapLS(msg)
 			case "ACK":
-				let acked = (msg.params.last ?? "").lowercased()
-				if acked.contains("sasl") {
-					Task { [weak self] in try? await self?.send("AUTHENTICATE PLAIN") }
-				}
+				handleCapACK(msg)
 			case "NAK":
-				Task { [weak self] in try? await self?.send("CAP END") }
-				saslInProgress = false
+				finishCapNegotiation()
 			default:
 				break
 			}
 		case "AUTHENTICATE":
-			// Server sends "AUTHENTICATE +" to request credentials.
 			guard msg.params.first == "+",
 			      let account = saslAccount,
 			      let password = saslPassword else { return }
@@ -356,19 +361,77 @@ public actor IRCConnection {
 		default:
 			break
 		}
-		// 900-series SASL numerics.
 		switch msg.commandNumeric {
 		case 903:
-			// RPL_SASLSUCCESS — close caps and let registration finish.
-			Task { [weak self] in try? await self?.send("CAP END") }
-			saslInProgress = false
+			// RPL_SASLSUCCESS — end cap negotiation so 001 can follow.
+			finishCapNegotiation()
 		case 902, 904, 905, 906, 907:
-			// SASL failure — still close caps so registration can proceed.
-			Task { [weak self] in try? await self?.send("CAP END") }
-			saslInProgress = false
+			// SASL failure — still end so the connection can proceed (unauthed).
+			finishCapNegotiation()
 		default:
 			break
 		}
+	}
+
+	private func handleCapLS(_ msg: IRCLineParserResult) {
+		// Multi-line LS: params[2] is "*" for continuation; final line has caps in params[2].
+		let isContinuation = msg.params.count >= 4 && msg.params[2] == "*"
+		let capsField = msg.params.last ?? ""
+		let advertised = capsField.split(separator: " ").map {
+			String($0.split(separator: "=").first ?? "")
+		}
+		supportedCaps.formUnion(advertised)
+		if isContinuation { return }
+
+		let toRequest = Self.desiredCaps.intersection(supportedCaps)
+		if toRequest.isEmpty {
+			finishCapNegotiation()
+			return
+		}
+		let list = toRequest.sorted().joined(separator: " ")
+		Task { [weak self] in try? await self?.send("CAP REQ :\(list)") }
+	}
+
+	private func handleCapACK(_ msg: IRCLineParserResult) {
+		let acked = (msg.params.last ?? "")
+			.split(separator: " ")
+			.map { String($0) }
+		enabledCaps.formUnion(acked)
+
+		if enabledCaps.contains("sasl") && useSasl {
+			Task { [weak self] in try? await self?.send("AUTHENTICATE PLAIN") }
+		} else {
+			finishCapNegotiation()
+		}
+	}
+
+	/// Handle post-registration CAP NEW / CAP DEL so our `enabledCaps` stays current.
+	private func handleCapUpdate(_ msg: IRCLineParserResult) {
+		guard msg.command == "CAP", msg.params.count >= 2 else { return }
+		let subcommand = msg.params[1].uppercased()
+		let capsField = msg.params.last ?? ""
+		let caps = Set(capsField.split(separator: " ").map {
+			String($0.split(separator: "=").first ?? "")
+		})
+		switch subcommand {
+		case "NEW":
+			supportedCaps.formUnion(caps)
+			let toRequest = Self.desiredCaps.intersection(caps)
+			guard !toRequest.isEmpty else { return }
+			let list = toRequest.sorted().joined(separator: " ")
+			Task { [weak self] in try? await self?.send("CAP REQ :\(list)") }
+		case "DEL":
+			enabledCaps.subtract(caps)
+			supportedCaps.subtract(caps)
+		default:
+			break
+		}
+	}
+
+	private func finishCapNegotiation() {
+		guard capNegotiationActive else { return }
+		capNegotiationActive = false
+		Task { [weak self] in try? await self?.send("CAP END") }
 	}
 
 	// MARK: - Errors

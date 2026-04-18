@@ -174,6 +174,11 @@ public final class IRCSession {
 		case "NICK":    handleNick(message)
 		case "TOPIC":   handleTopic(message)
 		case "KICK":    handleKick(message)
+		case "CHGHOST": handleChghost(message)
+		case "ACCOUNT": handleAccount(message)
+		case "AWAY":    handleAway(message)
+		case "BATCH":   break  // IRCv3 batches — ignored for now, messages flow through normally
+		case "CAP":     break  // CAP traffic is handled in IRCConnection; suppress server-log noise here
 		default:
 			// Surface unhandled protocol traffic in the server console so users
 			// can see what the server is saying.
@@ -334,7 +339,13 @@ public final class IRCSession {
 
 		// Highlight: incoming message mentions our nick as a whole word.
 		let isHighlight = !isOwnMessage(sender) && mentionsOwnNick(content)
-		let msg = Message(sender: sender, content: content, kind: kind, isHighlight: isHighlight)
+		let msg = Message(
+			timestamp: messageTimestamp(message),
+			sender: sender,
+			content: content,
+			kind: kind,
+			isHighlight: isHighlight
+		)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
@@ -366,6 +377,61 @@ public final class IRCSession {
 		}
 	}
 
+	// MARK: - IRCv3 extension handlers
+
+	/// CHGHOST <newuser> <newhost> — user's username/host changed (typically after SASL or vhost assignment).
+	private func handleChghost(_ message: IRCLineParserResult) {
+		guard message.params.count >= 2 else { return }
+		let nick = message.senderNickname ?? ""
+		let newUser = message.params[0]
+		let newHost = message.params[1]
+		for channel in server.channels {
+			if let user = channel.users.first(where: { $0.nickname == nick }) {
+				user.username = newUser
+				user.hostname = newHost
+			}
+		}
+	}
+
+	/// ACCOUNT <accountname|*> — notifies when a user logs in/out of a services account.
+	private func handleAccount(_ message: IRCLineParserResult) {
+		guard let value = message.params.first else { return }
+		let nick = message.senderNickname ?? ""
+		let account: String? = (value == "*") ? nil : value
+		for channel in server.channels {
+			if let user = channel.users.first(where: { $0.nickname == nick }) {
+				user.account = account
+			}
+		}
+	}
+
+	/// AWAY [:message] — server-to-client notification that a user's away state changed.
+	private func handleAway(_ message: IRCLineParserResult) {
+		let nick = message.senderNickname ?? ""
+		let reason = message.params.first
+		let isAway = reason != nil && !(reason?.isEmpty ?? true)
+		for channel in server.channels {
+			if let user = channel.users.first(where: { $0.nickname == nick }) {
+				user.isAway = isAway
+				user.awayMessage = isAway ? reason : nil
+			}
+		}
+	}
+
+	/// Returns the server-provided timestamp (IRCv3 `server-time` tag) if present,
+	/// otherwise the current local time. Falls back gracefully for servers without
+	/// `server-time` enabled.
+	private func messageTimestamp(_ msg: IRCLineParserResult) -> Date {
+		if let raw = msg.tags["time"] {
+			let formatter = ISO8601DateFormatter()
+			formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+			if let d = formatter.date(from: raw) { return d }
+			formatter.formatOptions = [.withInternetDateTime]
+			if let d = formatter.date(from: raw) { return d }
+		}
+		return Date()
+	}
+
 	/// True if `content` mentions our own nickname as a whole word (case-insensitive).
 	private func mentionsOwnNick(_ content: String) -> Bool {
 		let nick = server.nickname
@@ -384,7 +450,12 @@ public final class IRCSession {
 		let target = message.params[0]
 		let body = message.params[1]
 		let sender = message.senderNickname ?? message.senderString ?? "*"
-		let msg = Message(sender: sender, content: body, kind: .notice)
+		let msg = Message(
+			timestamp: messageTimestamp(message),
+			sender: sender,
+			content: body,
+			kind: .notice
+		)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
@@ -518,10 +589,25 @@ public final class IRCSession {
 		guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
 
 		for raw in namesLine.split(separator: " ") {
-			let (modes, nick) = parsePrefix(String(raw))
+			let (modes, rest) = parsePrefix(String(raw))
+			// With userhost-in-names enabled, each entry can be "nick!user@host".
+			let nick: String
+			var username: String?
+			var hostname: String?
+			if let bangIdx = rest.firstIndex(of: "!"),
+			   let atIdx = rest.firstIndex(of: "@"),
+			   bangIdx < atIdx {
+				nick = String(rest[..<bangIdx])
+				username = String(rest[rest.index(after: bangIdx)..<atIdx])
+				hostname = String(rest[rest.index(after: atIdx)...])
+			} else {
+				nick = rest
+			}
 			if !channel.users.contains(where: { $0.nickname == nick }) {
 				let user = User(nickname: nick)
 				user.modes = modes
+				user.username = username
+				user.hostname = hostname
 				channel.users.append(user)
 			}
 		}

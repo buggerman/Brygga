@@ -35,8 +35,10 @@ public final class User: Identifiable {
 	public var nickname: String
 	public var username: String?
 	public var hostname: String?
+	public var account: String?             // IRCv3 account-notify / account-tag
 	public var modes: Set<Character> = []   // o, h, v, q, a
 	public var isAway: Bool = false
+	public var awayMessage: String?
 
 	public init(nickname: String) {
 		self.id = nickname.lowercased()
