@@ -32,6 +32,10 @@ struct ContentView: View {
 			ConnectSheet()
 				.environment(appState)
 		}
+		.sheet(isPresented: $appState.showingChannelList) {
+			ChannelListSheet()
+				.environment(appState)
+		}
 	}
 
 	private var shouldShowUserList: Bool {
@@ -248,6 +252,14 @@ struct ChatView: View {
 			// User-initiated — disable auto-reconnect and send QUIT cleanly.
 			let reason = rest.isEmpty ? nil : rest
 			Task { await session.disconnect(quitMessage: reason) }
+		case "LIST":
+			// Clear prior listing and open the browser; the sheet's task will
+			// fire the LIST command against the server.
+			session.server.channelListing = []
+			session.server.isListingInProgress = true
+			appState.showingChannelList = true
+			let query = rest.isEmpty ? "LIST" : "LIST \(rest)"
+			Task { try? await session.connection.send(query) }
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
 			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)
@@ -576,6 +588,79 @@ struct InputBar: View {
 			historyIndex = nil
 			draft = draftBeforeHistory
 		}
+	}
+}
+
+// MARK: - Channel list browser
+
+@MainActor
+struct ChannelListSheet: View {
+	@Environment(AppState.self) private var appState
+	@Environment(\.dismiss) private var dismiss
+	@State private var filter: String = ""
+
+	private var listings: [ChannelListing] {
+		let all = appState.selectedServer?.channelListing ?? []
+		guard !filter.isEmpty else { return all }
+		let needle = filter.lowercased()
+		return all.filter {
+			$0.name.lowercased().contains(needle) ||
+			$0.topic.lowercased().contains(needle)
+		}
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			HStack {
+				Text("Channel List")
+					.font(.headline)
+				if appState.selectedServer?.isListingInProgress == true {
+					ProgressView().controlSize(.small)
+				}
+				Spacer()
+				Button("Done") { dismiss() }
+					.keyboardShortcut(.cancelAction)
+			}
+			.padding(.horizontal, 20)
+			.padding(.top, 20)
+			.padding(.bottom, 10)
+
+			TextField("Filter channels or topics", text: $filter)
+				.textFieldStyle(.roundedBorder)
+				.padding(.horizontal, 20)
+				.padding(.bottom, 10)
+
+			Table(listings) {
+				TableColumn("Channel") { listing in
+					Text(listing.name).font(.system(.body, design: .monospaced))
+				}
+				.width(min: 120, ideal: 160)
+
+				TableColumn("Users") { listing in
+					Text("\(listing.userCount)")
+				}
+				.width(min: 60, ideal: 70)
+
+				TableColumn("Topic") { listing in
+					Text(listing.topic).lineLimit(1)
+				}
+
+				TableColumn("") { listing in
+					Button("Join") {
+						joinAndDismiss(listing.name)
+					}
+				}
+				.width(min: 60, ideal: 70)
+			}
+			.frame(minHeight: 300)
+		}
+		.frame(width: 680, height: 480)
+	}
+
+	private func joinAndDismiss(_ name: String) {
+		guard let session = appState.selectedSession else { return }
+		Task { try? await session.join(name) }
+		dismiss()
 	}
 }
 

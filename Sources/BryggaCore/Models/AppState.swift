@@ -28,6 +28,9 @@ public final class AppState {
 	/// Coordination flag for presenting the Connect Server sheet.
 	public var showingConnectSheet: Bool = false
 
+	/// Coordination flag for presenting the channel-list browser.
+	public var showingChannelList: Bool = false
+
 	public init() {
 		restoreFromStore()
 		requestNotificationPermission()

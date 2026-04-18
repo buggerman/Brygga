@@ -19,6 +19,8 @@ public final class Server: Identifiable {
 	public var saslPassword: String?
 	public var channels: [Channel] = []
 	public var messages: [Message] = []
+	public var channelListing: [ChannelListing] = []
+	public var isListingInProgress: Bool = false
 	public var state: ConnectionState = .disconnected
 	public var isExpanded: Bool = true
 
@@ -54,5 +56,20 @@ public final class Server: Identifiable {
 		case .connected, .registered: return true
 		default: return false
 		}
+	}
+}
+
+/// A single entry from a `LIST` response — a channel known to the server.
+public struct ChannelListing: Identifiable, Sendable, Equatable {
+	public let id: UUID
+	public let name: String
+	public let userCount: Int
+	public let topic: String
+
+	public init(name: String, userCount: Int, topic: String) {
+		self.id = UUID()
+		self.name = name
+		self.userCount = userCount
+		self.topic = topic
 	}
 }

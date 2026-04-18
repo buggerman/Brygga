@@ -284,6 +284,25 @@ public final class IRCSession {
 			handleNamesReply(message)
 		case 366:
 			break
+		case 321:
+			// RPL_LISTSTART — begin a fresh listing.
+			server.channelListing = []
+			server.isListingInProgress = true
+		case 322:
+			// RPL_LIST — one channel entry: params = [me, name, userCount, topic]
+			guard message.params.count >= 3 else { break }
+			let name = message.params[1]
+			let count = Int(message.params[2]) ?? 0
+			let topic = message.params.count > 3 ? message.params[3] : ""
+			server.channelListing.append(ChannelListing(
+				name: name,
+				userCount: count,
+				topic: topic
+			))
+		case 323:
+			// RPL_LISTEND — sort by user count descending.
+			server.channelListing.sort { $0.userCount > $1.userCount }
+			server.isListingInProgress = false
 		default:
 			appendServerLog(message)
 		}
