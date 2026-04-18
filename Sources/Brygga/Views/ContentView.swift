@@ -400,12 +400,23 @@ struct TopicBar: View {
 
 struct MessageList: View {
 	let channel: Channel
+	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
+
+	private var visibleMessages: [Message] {
+		if showJoinsParts { return channel.messages }
+		return channel.messages.filter { msg in
+			switch msg.kind {
+			case .join, .part, .quit, .nick: return false
+			default: return true
+			}
+		}
+	}
 
 	var body: some View {
 		ScrollViewReader { proxy in
 			ScrollView {
 				LazyVStack(alignment: .leading, spacing: 2) {
-					ForEach(channel.messages) { message in
+					ForEach(visibleMessages) { message in
 						MessageRow(message: message)
 							.id(message.id)
 					}

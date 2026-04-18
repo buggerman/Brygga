@@ -668,17 +668,31 @@ public final class IRCSession {
 		return Date()
 	}
 
-	/// True if `content` mentions our own nickname as a whole word (case-insensitive).
+	/// True if `content` mentions our own nickname *or* any user-configured
+	/// highlight keyword as a whole word (case-insensitive).
 	private func mentionsOwnNick(_ content: String) -> Bool {
-		let nick = server.nickname
-		guard !nick.isEmpty else { return false }
-		let escaped = NSRegularExpression.escapedPattern(for: nick)
-		let pattern = "(?:^|[^A-Za-z0-9_-])\(escaped)(?:[^A-Za-z0-9_-]|$)"
-		guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-			return false
+		var terms: [String] = []
+		if !server.nickname.isEmpty { terms.append(server.nickname) }
+
+		let raw = UserDefaults.standard.string(forKey: PreferencesKeys.highlightKeywordsRaw) ?? ""
+		for line in raw.split(whereSeparator: \.isNewline) {
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+			if !trimmed.isEmpty { terms.append(trimmed) }
 		}
-		let range = NSRange(content.startIndex..., in: content)
-		return regex.firstMatch(in: content, range: range) != nil
+		guard !terms.isEmpty else { return false }
+
+		for term in terms {
+			let escaped = NSRegularExpression.escapedPattern(for: term)
+			let pattern = "(?:^|[^A-Za-z0-9_-])\(escaped)(?:[^A-Za-z0-9_-]|$)"
+			guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+				continue
+			}
+			let range = NSRange(content.startIndex..., in: content)
+			if regex.firstMatch(in: content, range: range) != nil {
+				return true
+			}
+		}
+		return false
 	}
 
 	private func handleNotice(_ message: IRCLineParserResult) {

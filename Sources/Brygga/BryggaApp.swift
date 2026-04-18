@@ -57,5 +57,9 @@ struct BryggaApp: App {
 					.keyboardShortcut("w", modifiers: [.command])
 			}
 		}
+
+		Settings {
+			PreferencesView()
+		}
 	}
 }
