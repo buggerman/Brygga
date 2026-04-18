@@ -239,6 +239,14 @@ public final class IRCSession {
 		case 1:
 			server.state = .registered
 			reconnectAttempt = 0
+			// 001's first param is the nick the server assigned us. The server is
+			// authoritative — on some networks (e.g., Ergo with
+			// force-nick-equals-account) our SASL-authenticated nick may differ
+			// from what we sent in NICK. Keep `server.nickname` in sync so
+			// `isOwnMessage` correctly identifies our own JOIN/PART/NICK echoes.
+			if let serverAssignedNick = message.params.first, !serverAssignedNick.isEmpty {
+				server.nickname = serverAssignedNick
+			}
 			appendServerLog(message)
 			for name in autoJoinChannels {
 				Task { try? await join(name) }
