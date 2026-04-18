@@ -6,6 +6,8 @@ Rules for AI coding agents working in this repo. Read before editing.
 
 Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: **macOS 26+, Apple Silicon only**. Liquid Glass is the baseline design language — no pre-26 fallbacks, no Intel builds. Default branch: `main`.
 
+Feature scope and priority are defined in [docs/PARITY.md](docs/PARITY.md) — the mIRC-parity plan. Before proposing a new feature, check whether it's already in Phase 1/2/3 or explicitly out of scope.
+
 ## Layout
 
 - `Sources/BryggaCore/` — library target. IRC protocol, connection, session, models, persistence.

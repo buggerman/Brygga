@@ -90,6 +90,8 @@ Configuration lives in `~/Library/Application Support/Brygga/servers.json`.
 
 See [AGENTS.md](AGENTS.md) for the rules AI coding agents (and humans) should follow when working in this repo.
 
+The mIRC feature-parity plan — what's in scope, out of scope, and in what order — lives in [docs/PARITY.md](docs/PARITY.md).
+
 ## License
 
 BSD 3-Clause. See source file headers.
