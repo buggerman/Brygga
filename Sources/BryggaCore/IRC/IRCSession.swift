@@ -289,6 +289,17 @@ public final class IRCSession {
 			handleNamesReply(message)
 		case 366:
 			break
+		case 311: handleWhoisUser(message)
+		case 312: handleWhoisServer(message)
+		case 313: appendWhois(message, format: "is an IRC operator")
+		case 317: handleWhoisIdle(message)
+		case 318: appendWhois(message, format: "End of WHOIS")
+		case 319: handleWhoisChannels(message)
+		case 330: handleWhoisAccount(message)
+		case 335: appendWhois(message, format: "is a bot")
+		case 378: handleWhoisHost(message)
+		case 379: handleWhoisModes(message)
+		case 671: appendWhois(message, format: "is using a secure connection")
 		case 321:
 			// RPL_LISTSTART — begin a fresh listing.
 			server.channelListing = []
@@ -375,6 +386,90 @@ public final class IRCSession {
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
 		}
+	}
+
+	// MARK: - /whois numerics
+
+	/// Appends a `.server` log line rendered as `* <targetNick> <content>`.
+	/// NickColor automatically colors the target nick.
+	private func appendWhois(_ message: IRCLineParserResult, format content: String) {
+		guard message.params.count >= 2 else { return }
+		let target = message.params[1]
+		recordServer(Message(
+			timestamp: messageTimestamp(message),
+			sender: target,
+			content: content,
+			kind: .server
+		))
+	}
+
+	/// 311 RPL_WHOISUSER — params: [me, nick, user, host, "*", :realname]
+	private func handleWhoisUser(_ message: IRCLineParserResult) {
+		guard message.params.count >= 6 else { return }
+		let user = message.params[2]
+		let host = message.params[3]
+		let realname = message.params[5]
+		appendWhois(message, format: "(\(user)@\(host)) — \(realname)")
+	}
+
+	/// 312 RPL_WHOISSERVER — params: [me, nick, server, :serverinfo]
+	private func handleWhoisServer(_ message: IRCLineParserResult) {
+		guard message.params.count >= 4 else { return }
+		let serverName = message.params[2]
+		let info = message.params[3]
+		appendWhois(message, format: "on \(serverName) (\(info))")
+	}
+
+	/// 317 RPL_WHOISIDLE — params: [me, nick, idleSeconds, signonUnix?, :seconds idle, signon time]
+	private func handleWhoisIdle(_ message: IRCLineParserResult) {
+		guard message.params.count >= 3, let idle = Int(message.params[2]) else { return }
+		let idleText = formatDuration(seconds: idle)
+		if message.params.count >= 4, let signon = TimeInterval(message.params[3]) {
+			let date = Date(timeIntervalSince1970: signon)
+			let formatter = DateFormatter()
+			formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+			appendWhois(message, format: "idle \(idleText), signed on \(formatter.string(from: date))")
+		} else {
+			appendWhois(message, format: "idle \(idleText)")
+		}
+	}
+
+	/// 319 RPL_WHOISCHANNELS — params: [me, nick, :channels-with-prefixes]
+	private func handleWhoisChannels(_ message: IRCLineParserResult) {
+		guard message.params.count >= 3 else { return }
+		let channels = message.params[2]
+			.split(separator: " ")
+			.map(String.init)
+			.joined(separator: ", ")
+		appendWhois(message, format: "on \(channels)")
+	}
+
+	/// 330 RPL_WHOISACCOUNT — params: [me, nick, account, :is logged in as]
+	private func handleWhoisAccount(_ message: IRCLineParserResult) {
+		guard message.params.count >= 3 else { return }
+		let account = message.params[2]
+		appendWhois(message, format: "is logged in as \(account)")
+	}
+
+	/// 378 RPL_WHOISHOST — params: [me, nick, :is connecting from *@host ip]
+	private func handleWhoisHost(_ message: IRCLineParserResult) {
+		guard message.params.count >= 3 else { return }
+		appendWhois(message, format: message.params[2])
+	}
+
+	/// 379 RPL_WHOISMODES — params: [me, nick, :is using modes ...]
+	private func handleWhoisModes(_ message: IRCLineParserResult) {
+		guard message.params.count >= 3 else { return }
+		appendWhois(message, format: message.params[2])
+	}
+
+	private func formatDuration(seconds: Int) -> String {
+		let h = seconds / 3600
+		let m = (seconds % 3600) / 60
+		let s = seconds % 60
+		if h > 0 { return "\(h)h \(m)m \(s)s" }
+		if m > 0 { return "\(m)m \(s)s" }
+		return "\(s)s"
 	}
 
 	// MARK: - IRCv3 extension handlers
