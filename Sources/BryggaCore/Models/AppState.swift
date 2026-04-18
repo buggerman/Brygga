@@ -6,6 +6,10 @@
 
 import Foundation
 import Observation
+#if canImport(AppKit)
+import AppKit
+#endif
+import UserNotifications
 
 /// Root application state. Holds all servers, sessions, and selection.
 /// SwiftUI views observe this directly.
@@ -26,6 +30,52 @@ public final class AppState {
 
 	public init() {
 		restoreFromStore()
+		requestNotificationPermission()
+	}
+
+	// MARK: - Notifications
+
+	private func requestNotificationPermission() {
+		UNUserNotificationCenter.current().requestAuthorization(
+			options: [.alert, .sound, .badge]
+		) { _, _ in }
+	}
+
+	/// Post a macOS banner for a highlight and bump the Dock badge.
+	/// Suppresses the banner if the app is frontmost and that exact channel
+	/// is already selected.
+	private func notifyHighlight(_ message: Message, in channel: Channel) {
+		let isForegroundedOnThisChannel: Bool = {
+			#if canImport(AppKit)
+			guard NSApp.isActive else { return false }
+			#endif
+			return selection == channel.id
+		}()
+
+		if !isForegroundedOnThisChannel {
+			let content = UNMutableNotificationContent()
+			content.title = channel.name
+			content.body = "\(message.sender): \(message.content)"
+			content.sound = .default
+			let request = UNNotificationRequest(
+				identifier: UUID().uuidString,
+				content: content,
+				trigger: nil
+			)
+			UNUserNotificationCenter.current().add(request)
+		}
+		refreshDockBadge()
+	}
+
+	/// Recomputes the total highlight count across all channels and updates
+	/// the Dock badge. Call after any change to any channel's `highlightCount`.
+	public func refreshDockBadge() {
+		let total = servers.reduce(0) { acc, server in
+			acc + server.channels.reduce(0) { $0 + $1.highlightCount }
+		}
+		#if canImport(AppKit)
+		NSApp.dockTile.badgeLabel = total > 0 ? String(total) : nil
+		#endif
 	}
 
 	// MARK: - Persistence
@@ -170,6 +220,9 @@ public final class AppState {
 		let session = IRCSession(server: server, connection: connection)
 		session.autoJoinChannels = autoJoinChannels
 		session.onChannelsChanged = { [weak self] in self?.persist() }
+		session.onHighlight = { [weak self] channel, message in
+			self?.notifyHighlight(message, in: channel)
+		}
 		session.start()
 
 		servers.append(server)

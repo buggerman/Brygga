@@ -27,6 +27,11 @@ public final class IRCSession {
 	/// subscribe to persist the change.
 	public var onChannelsChanged: (() -> Void)?
 
+	/// Fires every time an incoming message is flagged as a highlight
+	/// (mention of our nick, or any PM). The UI can use this to post
+	/// notifications or update Dock badges.
+	public var onHighlight: ((Channel, Message) -> Void)?
+
 	/// If true, the session automatically reconnects after unexpected drops
 	/// with exponential backoff. User-initiated disconnects (via `stop()`)
 	/// suppress reconnect regardless.
@@ -319,6 +324,7 @@ public final class IRCSession {
 					channel.unreadCount += 1
 					if isHighlight {
 						channel.highlightCount += 1
+						onHighlight?(channel, msg)
 					}
 				}
 			}
@@ -337,6 +343,7 @@ public final class IRCSession {
 			channel.unreadCount += 1
 			// PMs are inherently "for you" — always a highlight.
 			channel.highlightCount += 1
+			onHighlight?(channel, msg)
 		}
 	}
 

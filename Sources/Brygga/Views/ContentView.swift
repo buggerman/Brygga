@@ -192,6 +192,7 @@ struct ChatView: View {
 				channel.unreadCount = 0
 				channel.highlightCount = 0
 			}
+			appState.refreshDockBadge()
 		}
 	}
 
