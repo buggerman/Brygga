@@ -337,6 +337,11 @@ public final class IRCSession {
 		let body = message.params[1]
 		let sender = message.senderNickname ?? message.senderString ?? ""
 
+		// Drop messages from ignored senders entirely — no record, no highlight,
+		// no notification. Presence events (JOIN/PART/QUIT) still render so the
+		// view of the channel stays truthful.
+		if isIgnored(sender: sender, mask: message.senderString) { return }
+
 		// CTCP detection — bodies wrapped in \x01.
 		let content: String
 		let kind: Message.Kind
@@ -398,6 +403,67 @@ public final class IRCSession {
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
 		}
+	}
+
+	// MARK: - Ignore list
+
+	/// Add a nickname or hostmask pattern to the ignore list. Idempotent.
+	public func addIgnore(_ pattern: String) {
+		let trimmed = pattern.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty else { return }
+		let lc = trimmed.lowercased()
+		guard !server.ignoreList.contains(where: { $0.lowercased() == lc }) else { return }
+		server.ignoreList.append(trimmed)
+		onChannelsChanged?()
+	}
+
+	/// Remove a nickname or hostmask pattern from the ignore list. Case-insensitive.
+	@discardableResult
+	public func removeIgnore(_ pattern: String) -> Bool {
+		let lc = pattern.lowercased()
+		let before = server.ignoreList.count
+		server.ignoreList.removeAll { $0.lowercased() == lc }
+		let removed = server.ignoreList.count != before
+		if removed { onChannelsChanged?() }
+		return removed
+	}
+
+	/// True if `nick` (or `mask`, if provided) matches any entry in the ignore list.
+	/// Entries containing `*`, `!`, or `@` are treated as hostmask globs matched
+	/// against `mask` (nick!user@host). Plain entries are exact-nick matches.
+	public func isIgnored(sender nick: String, mask: String?) -> Bool {
+		let lcNick = nick.lowercased()
+		let lcMask = mask?.lowercased()
+		for entry in server.ignoreList {
+			let lcEntry = entry.lowercased()
+			let isGlob = lcEntry.contains("*") || lcEntry.contains("!") || lcEntry.contains("@")
+			if isGlob {
+				if let lcMask = lcMask, Self.globMatch(pattern: lcEntry, input: lcMask) {
+					return true
+				}
+			} else if lcEntry == lcNick {
+				return true
+			}
+		}
+		return false
+	}
+
+	/// Simple IRC-style glob: `*` matches any run, `?` matches one character,
+	/// everything else is literal.
+	private static func globMatch(pattern: String, input: String) -> Bool {
+		var regex = "^"
+		for c in pattern {
+			switch c {
+			case "*": regex += ".*"
+			case "?": regex += "."
+			case ".", "+", "(", ")", "[", "]", "{", "}", "^", "$", "\\", "|":
+				regex += "\\\(c)"
+			default:
+				regex.append(c)
+			}
+		}
+		regex += "$"
+		return input.range(of: regex, options: .regularExpression) != nil
 	}
 
 	// MARK: - CTCP auto-responses
@@ -620,6 +686,9 @@ public final class IRCSession {
 		let target = message.params[0]
 		let body = message.params[1]
 		let sender = message.senderNickname ?? message.senderString ?? "*"
+
+		// Ignore list suppresses NOTICE the same as PRIVMSG.
+		if isIgnored(sender: sender, mask: message.senderString) { return }
 		let msg = Message(
 			timestamp: messageTimestamp(message),
 			sender: sender,

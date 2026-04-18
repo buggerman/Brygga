@@ -20,10 +20,11 @@ public enum ServerStore {
 		public var openQueries: [String] = []
 		public var saslAccount: String?
 		public var saslPassword: String?
+		public var ignoreList: [String] = []
 
 		enum CodingKeys: String, CodingKey {
 			case name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
-			     saslAccount, saslPassword
+			     saslAccount, saslPassword, ignoreList
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -37,6 +38,7 @@ public enum ServerStore {
 			openQueries = try c.decodeIfPresent([String].self, forKey: .openQueries) ?? []
 			saslAccount = try c.decodeIfPresent(String.self, forKey: .saslAccount)
 			saslPassword = try c.decodeIfPresent(String.self, forKey: .saslPassword)
+			ignoreList = try c.decodeIfPresent([String].self, forKey: .ignoreList) ?? []
 		}
 
 		public init(
@@ -48,7 +50,8 @@ public enum ServerStore {
 			autoJoinChannels: [String],
 			openQueries: [String],
 			saslAccount: String? = nil,
-			saslPassword: String? = nil
+			saslPassword: String? = nil,
+			ignoreList: [String] = []
 		) {
 			self.name = name
 			self.host = host
@@ -59,6 +62,7 @@ public enum ServerStore {
 			self.openQueries = openQueries
 			self.saslAccount = saslAccount
 			self.saslPassword = saslPassword
+			self.ignoreList = ignoreList
 		}
 	}
 

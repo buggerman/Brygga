@@ -232,6 +232,35 @@ struct ChatView: View {
 		draft = ""
 	}
 
+	private func handleIgnore(_ rest: String, session: IRCSession) {
+		let arg = rest.trimmingCharacters(in: .whitespaces)
+		if arg.isEmpty {
+			// List current ignores.
+			let list = session.server.ignoreList
+			if list.isEmpty {
+				session.recordServer(Message(sender: "*", content: "ignore list is empty", kind: .server))
+			} else {
+				for entry in list {
+					session.recordServer(Message(sender: "*", content: "ignoring: \(entry)", kind: .server))
+				}
+			}
+			return
+		}
+		// Support "-r <pattern>" to remove.
+		if arg.hasPrefix("-r ") {
+			let target = String(arg.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+			let removed = session.removeIgnore(target)
+			session.recordServer(Message(
+				sender: "*",
+				content: removed ? "unignored \(target)" : "not in ignore list: \(target)",
+				kind: .server
+			))
+			return
+		}
+		session.addIgnore(arg)
+		session.recordServer(Message(sender: "*", content: "ignoring \(arg)", kind: .server))
+	}
+
 	private func handleSlash(_ text: String, session: IRCSession, channel: Channel?, sender: String) {
 		let parts = text.dropFirst().split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
 		let command = parts.first.map { $0.uppercased() } ?? ""
@@ -260,6 +289,15 @@ struct ChatView: View {
 			appState.showingChannelList = true
 			let query = rest.isEmpty ? "LIST" : "LIST \(rest)"
 			Task { try? await session.connection.send(query) }
+		case "IGNORE":
+			handleIgnore(rest, session: session)
+		case "UNIGNORE":
+			_ = session.removeIgnore(rest.trimmingCharacters(in: .whitespaces))
+			session.recordServer(Message(
+				sender: "*",
+				content: "unignored \(rest)",
+				kind: .server
+			))
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
 			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)

@@ -100,7 +100,8 @@ public final class AppState {
 				nickname: config.nickname,
 				autoJoinChannels: config.autoJoinChannels,
 				saslAccount: config.saslAccount,
-				saslPassword: config.saslPassword
+				saslPassword: config.saslPassword,
+				ignoreList: config.ignoreList
 			)
 			for nick in config.openQueries {
 				server.channels.append(Channel(name: nick))
@@ -144,7 +145,8 @@ public final class AppState {
 				autoJoinChannels: joined,
 				openQueries: queries,
 				saslAccount: server.saslAccount,
-				saslPassword: server.saslPassword
+				saslPassword: server.saslPassword,
+				ignoreList: server.ignoreList
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -201,7 +203,8 @@ public final class AppState {
 		nickname: String,
 		autoJoinChannels: [String] = [],
 		saslAccount: String? = nil,
-		saslPassword: String? = nil
+		saslPassword: String? = nil,
+		ignoreList: [String] = []
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
@@ -212,6 +215,7 @@ public final class AppState {
 			saslAccount: saslAccount,
 			saslPassword: saslPassword
 		)
+		server.ignoreList = ignoreList
 		let connection = IRCConnection(
 			host: host,
 			port: port,
