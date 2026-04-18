@@ -131,24 +131,19 @@ public actor IRCConnection {
 		self.connection = conn
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			var resumed = false
-			let resume: (Result<Void, Error>) -> Void = { result in
-				guard !resumed else { return }
-				resumed = true
-				continuation.resume(with: result)
-			}
+			let resumer = SingleShotResumer(continuation: continuation)
 
 			conn.stateUpdateHandler = { [weak self] nwState in
 				switch nwState {
 				case .ready:
-					resume(.success(()))
+					resumer.resume(.success(()))
 					Task { [weak self] in await self?.onReady() }
 				case .failed(let error):
 					let reason = error.localizedDescription
-					resume(.failure(ConnectionError.networkFailed(reason)))
+					resumer.resume(.failure(ConnectionError.networkFailed(reason)))
 					Task { [weak self] in await self?.onFailed(reason) }
 				case .cancelled:
-					resume(.failure(ConnectionError.cancelled))
+					resumer.resume(.failure(ConnectionError.cancelled))
 				default:
 					break
 				}
@@ -384,5 +379,24 @@ public actor IRCConnection {
 		case networkFailed(String)
 		case cancelled
 		case notConnected
+	}
+}
+
+/// Serializes a single-shot `CheckedContinuation` resume across the
+/// NWConnection state-update callbacks. NWConnection invokes its handler on
+/// the serial queue we pass to `conn.start`, so concurrent access isn't an
+/// issue — but Swift 6 strict concurrency requires a `Sendable` capture.
+private final class SingleShotResumer: @unchecked Sendable {
+	private var resumed = false
+	private let continuation: CheckedContinuation<Void, Error>
+
+	init(continuation: CheckedContinuation<Void, Error>) {
+		self.continuation = continuation
+	}
+
+	func resume(_ result: Result<Void, Error>) {
+		guard !resumed else { return }
+		resumed = true
+		continuation.resume(with: result)
 	}
 }

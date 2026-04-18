@@ -6,9 +6,10 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 
 ## Requirements
 
-- macOS 14 (Sonoma) or later
-- Xcode 15.4 or later (for building from source)
-- Swift 5.9+
+- macOS 26 or later (earlier versions not supported — Brygga uses Liquid Glass)
+- Apple Silicon only (arm64 — no Intel builds)
+- Xcode 26 or later (for building from source)
+- Swift 6.0+
 
 ## Building
 
@@ -57,7 +58,6 @@ The roadmap is directional, not a commitment. Scope and order will shift as the 
 ### Medium term — polish and protocol depth
 
 - Detachable tabs (`Cmd+Shift+D` moves a channel to its own window)
-- Liquid Glass rendering on macOS 26
 - IRCv3 capability negotiation: `message-tags`, `server-time`, `account-tag`, `echo-message`, `batch`
 - Themeable message rendering
 - Away / idle state, channel modes UI

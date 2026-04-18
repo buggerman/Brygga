@@ -4,7 +4,7 @@ Rules for AI coding agents working in this repo. Read before editing.
 
 ## Project
 
-Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: macOS 14+. Default branch: `main`.
+Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: **macOS 26+, Apple Silicon only**. Liquid Glass is the baseline design language — no pre-26 fallbacks, no Intel builds. Default branch: `main`.
 
 ## Layout
 
@@ -19,7 +19,7 @@ Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: mac
 - `swift build` — library + executable.
 - `swift test` — full test suite. All tests must pass before commit.
 - `./Scripts/build-app.sh` — produces `build/Brygga.app`. Use `open build/Brygga.app` to launch with a Dock icon. Use `./build/Brygga.app/Contents/MacOS/Brygga` from Terminal to capture `stderr` while debugging.
-- CI runs on `macos-14` with Xcode 15.4 (`.github/workflows/ci.yml`).
+- CI runs on `macos-26` with Xcode 26 (`.github/workflows/ci.yml`).
 
 ## Architecture invariants
 
