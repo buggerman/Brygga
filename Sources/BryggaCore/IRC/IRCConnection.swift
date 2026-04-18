@@ -126,10 +126,11 @@ public actor IRCConnection {
 				switch nwState {
 				case .ready:
 					resume(.success(()))
-					Task { await self?.onReady() }
+					Task { [weak self] in await self?.onReady() }
 				case .failed(let error):
-					resume(.failure(ConnectionError.networkFailed(error.localizedDescription)))
-					Task { await self?.onFailed(error.localizedDescription) }
+					let reason = error.localizedDescription
+					resume(.failure(ConnectionError.networkFailed(reason)))
+					Task { [weak self] in await self?.onFailed(reason) }
 				case .cancelled:
 					resume(.failure(ConnectionError.cancelled))
 				default:
