@@ -698,7 +698,8 @@ struct UserListView: View {
 extension AttributedString {
 	/// Builds a styled `AttributedString` from an IRC message body by
 	/// parsing mIRC control codes (`^B`, `^I`, `^U`, `^R`, `^O`, `^K[,bg]`,
-	/// `^S`) and mapping them onto SwiftUI attributes.
+	/// `^S`) and mapping them onto SwiftUI attributes. URLs and email
+	/// addresses are also detected and marked as clickable links.
 	static func fromIRC(_ text: String) -> AttributedString {
 		let runs = IRCFormatting.parse(text)
 		var result = AttributedString()
@@ -729,6 +730,33 @@ extension AttributedString {
 
 			result.append(piece)
 		}
+		applyLinkDetection(to: &result)
 		return result
+	}
+
+	/// Scans the already-styled `attributed` for URLs and email addresses
+	/// and overlays `.link`, underline, and accent color on matching ranges.
+	private static func applyLinkDetection(to attributed: inout AttributedString) {
+		let plain = String(attributed.characters)
+		guard !plain.isEmpty else { return }
+		guard let detector = try? NSDataDetector(
+			types: NSTextCheckingResult.CheckingType.link.rawValue
+		) else { return }
+
+		let fullRange = NSRange(plain.startIndex..., in: plain)
+		detector.enumerateMatches(in: plain, options: [], range: fullRange) { match, _, _ in
+			guard let match = match, let url = match.url else { return }
+			guard let swiftRange = Range(match.range, in: plain) else { return }
+			let startOffset = plain.distance(from: plain.startIndex, to: swiftRange.lowerBound)
+			let length = plain.distance(from: swiftRange.lowerBound, to: swiftRange.upperBound)
+			let startIdx = attributed.characters.index(
+				attributed.characters.startIndex,
+				offsetBy: startOffset
+			)
+			let endIdx = attributed.characters.index(startIdx, offsetBy: length)
+			attributed[startIdx..<endIdx].link = url
+			attributed[startIdx..<endIdx].underlineStyle = .single
+			attributed[startIdx..<endIdx].foregroundColor = Color.accentColor
+		}
 	}
 }
