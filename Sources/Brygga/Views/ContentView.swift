@@ -389,7 +389,9 @@ struct MessageRow: View {
 	let message: Message
 
 	private var actionAttributedString: AttributedString {
-		var composed = AttributedString(message.sender + " ")
+		var sender = AttributedString(message.sender + " ")
+		sender.foregroundColor = NickColor.color(for: message.sender)
+		var composed = sender
 		composed.append(AttributedString.fromIRC(message.content))
 		return composed
 	}
@@ -424,7 +426,7 @@ struct MessageRow: View {
 			case .privmsg:
 				Text(message.sender)
 					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(Color.accentColor)
+					.foregroundStyle(NickColor.color(for: message.sender))
 				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
 					.textSelection(.enabled)
@@ -685,11 +687,50 @@ struct UserListView: View {
 						.frame(width: 10, alignment: .leading)
 					Text(user.nickname)
 						.font(.system(.body, design: .monospaced))
+						.foregroundStyle(NickColor.color(for: user.nickname))
 				}
 			}
 		} else {
 			ContentUnavailableView("No Users", systemImage: "person.2")
 		}
+	}
+}
+
+// MARK: - Nick colors
+
+/// Stable nickname → color mapping. Hashes the lowercased nick with FNV-1a
+/// (not Swift's randomized `Hasher`) so the same nick always renders with
+/// the same color across launches and across machines.
+enum NickColor {
+	/// Curated palette of 16 hues that remain legible on both light and
+	/// dark backgrounds. Avoids pure black/white/grey.
+	static let palette: [Color] = [
+		Color(red: 0.23, green: 0.49, blue: 1.00),   // blue
+		Color(red: 0.18, green: 0.72, blue: 0.45),   // green
+		Color(red: 0.94, green: 0.55, blue: 0.18),   // orange
+		Color(red: 0.71, green: 0.35, blue: 0.77),   // purple
+		Color(red: 0.18, green: 0.74, blue: 0.77),   // teal
+		Color(red: 0.89, green: 0.35, blue: 0.52),   // pink
+		Color(red: 0.83, green: 0.69, blue: 0.22),   // gold
+		Color(red: 0.42, green: 0.35, blue: 0.80),   // slate blue
+		Color(red: 0.76, green: 0.33, blue: 0.31),   // brick
+		Color(red: 0.48, green: 0.60, blue: 0.31),   // olive
+		Color(red: 0.35, green: 0.65, blue: 0.84),   // sky
+		Color(red: 0.82, green: 0.42, blue: 0.54),   // rose
+		Color(red: 0.48, green: 0.62, blue: 0.62),   // sage
+		Color(red: 0.88, green: 0.55, blue: 0.23),   // ochre
+		Color(red: 0.56, green: 0.43, blue: 0.72),   // lavender
+		Color(red: 0.31, green: 0.62, blue: 0.49),   // jade
+	]
+
+	static func color(for nickname: String) -> Color {
+		guard !nickname.isEmpty else { return palette[0] }
+		var hash: UInt32 = 2_166_136_261
+		for byte in nickname.lowercased().utf8 {
+			hash ^= UInt32(byte)
+			hash = hash &* 16_777_619
+		}
+		return palette[Int(hash % UInt32(palette.count))]
 	}
 }
 
