@@ -59,13 +59,35 @@ public struct Message: Identifiable, Sendable, Codable {
 	public let sender: String
 	public let content: String
 	public let kind: Kind
+	public var isHighlight: Bool
 
-	public init(timestamp: Date = Date(), sender: String, content: String, kind: Kind) {
+	public init(
+		timestamp: Date = Date(),
+		sender: String,
+		content: String,
+		kind: Kind,
+		isHighlight: Bool = false
+	) {
 		self.id = UUID()
 		self.timestamp = timestamp
 		self.sender = sender
 		self.content = content
 		self.kind = kind
+		self.isHighlight = isHighlight
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case id, timestamp, sender, content, kind, isHighlight
+	}
+
+	public init(from decoder: Decoder) throws {
+		let c = try decoder.container(keyedBy: CodingKeys.self)
+		self.id = try c.decode(UUID.self, forKey: .id)
+		self.timestamp = try c.decode(Date.self, forKey: .timestamp)
+		self.sender = try c.decode(String.self, forKey: .sender)
+		self.content = try c.decode(String.self, forKey: .content)
+		self.kind = try c.decode(Kind.self, forKey: .kind)
+		self.isHighlight = try c.decodeIfPresent(Bool.self, forKey: .isHighlight) ?? false
 	}
 
 	public enum Kind: String, Sendable, Codable {

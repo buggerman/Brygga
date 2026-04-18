@@ -375,6 +375,25 @@ struct MessageRow: View {
 	let message: Message
 
 	var body: some View {
+		rowBody
+			.padding(.vertical, message.isHighlight ? 2 : 0)
+			.padding(.horizontal, message.isHighlight ? 4 : 0)
+			.background(
+				message.isHighlight
+					? Color.accentColor.opacity(0.15)
+					: Color.clear
+			)
+			.overlay(alignment: .leading) {
+				if message.isHighlight {
+					Rectangle()
+						.fill(Color.accentColor)
+						.frame(width: 2)
+				}
+			}
+	}
+
+	@ViewBuilder
+	private var rowBody: some View {
 		HStack(alignment: .top, spacing: 8) {
 			Text(message.timestamp.formatted(date: .omitted, time: .shortened))
 				.font(.system(.caption, design: .monospaced))

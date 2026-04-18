@@ -308,13 +308,18 @@ public final class IRCSession {
 			kind = .privmsg
 		}
 
-		let msg = Message(sender: sender, content: content, kind: kind)
+		// Highlight: incoming message mentions our nick as a whole word.
+		let isHighlight = !isOwnMessage(sender) && mentionsOwnNick(content)
+		let msg = Message(sender: sender, content: content, kind: kind, isHighlight: isHighlight)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
 				record(msg, in: channel)
 				if !isOwnMessage(sender) {
 					channel.unreadCount += 1
+					if isHighlight {
+						channel.highlightCount += 1
+					}
 				}
 			}
 		} else {
@@ -330,7 +335,22 @@ public final class IRCSession {
 			}
 			record(msg, in: channel)
 			channel.unreadCount += 1
+			// PMs are inherently "for you" — always a highlight.
+			channel.highlightCount += 1
 		}
+	}
+
+	/// True if `content` mentions our own nickname as a whole word (case-insensitive).
+	private func mentionsOwnNick(_ content: String) -> Bool {
+		let nick = server.nickname
+		guard !nick.isEmpty else { return false }
+		let escaped = NSRegularExpression.escapedPattern(for: nick)
+		let pattern = "(?:^|[^A-Za-z0-9_-])\(escaped)(?:[^A-Za-z0-9_-]|$)"
+		guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+			return false
+		}
+		let range = NSRange(content.startIndex..., in: content)
+		return regex.firstMatch(in: content, range: range) != nil
 	}
 
 	private func handleNotice(_ message: IRCLineParserResult) {
