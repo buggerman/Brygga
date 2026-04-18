@@ -337,12 +337,24 @@ public final class IRCSession {
 		let body = message.params[1]
 		let sender = message.senderNickname ?? message.senderString ?? ""
 
-		let isAction = body.hasPrefix("\u{0001}ACTION ") && body.hasSuffix("\u{0001}")
+		// CTCP detection — bodies wrapped in \x01.
 		let content: String
 		let kind: Message.Kind
-		if isAction {
-			content = String(body.dropFirst(8).dropLast(1))
-			kind = .action
+		if body.hasPrefix("\u{0001}") {
+			var inner = body.dropFirst()
+			if inner.last == "\u{0001}" { inner = inner.dropLast() }
+			let parts = inner.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+			let ctcpCmd = (parts.first.map(String.init) ?? "").uppercased()
+			let ctcpArgs = parts.count > 1 ? String(parts[1]) : ""
+
+			if ctcpCmd == "ACTION" {
+				content = ctcpArgs
+				kind = .action
+			} else {
+				// Any other CTCP is metadata, not chat — auto-respond and suppress.
+				handleCTCPRequest(command: ctcpCmd, args: ctcpArgs, from: sender)
+				return
+			}
 		} else {
 			content = body
 			kind = .privmsg
@@ -385,6 +397,69 @@ public final class IRCSession {
 			// PMs are inherently "for you" — always a highlight.
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
+		}
+	}
+
+	// MARK: - CTCP auto-responses
+
+	/// Tracks the last time we replied to each requester, to avoid being
+	/// exploited as a flood amplifier.
+	private var ctcpReplyCooldown: [String: Date] = [:]
+	private static let ctcpCooldownInterval: TimeInterval = 10
+
+	/// The VERSION reply string, built once at first access.
+	private static let ctcpVersionReply: String = {
+		let v = ProcessInfo.processInfo.operatingSystemVersion
+		let osString = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+		let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1"
+		return "Brygga \(bundleVersion) (\(osString))"
+	}()
+
+	/// Handle an incoming CTCP request and, if known, send the canonical
+	/// NOTICE reply. Unknown CTCPs are silently ignored.
+	private func handleCTCPRequest(command: String, args: String, from sender: String) {
+		guard !isOwnMessage(sender) else { return }
+
+		let key = sender.lowercased()
+		let now = Date()
+		if let last = ctcpReplyCooldown[key],
+		   now.timeIntervalSince(last) < Self.ctcpCooldownInterval {
+			return
+		}
+
+		let reply: String?
+		switch command {
+		case "VERSION":
+			reply = Self.ctcpVersionReply
+		case "PING":
+			// Echo the payload unchanged — that's what the peer measures RTT against.
+			reply = args
+		case "TIME":
+			let f = ISO8601DateFormatter()
+			f.formatOptions = [.withInternetDateTime]
+			reply = f.string(from: now)
+		case "CLIENTINFO":
+			reply = "VERSION PING TIME CLIENTINFO SOURCE"
+		case "SOURCE":
+			reply = "https://github.com/buggerman/Brygga"
+		default:
+			reply = nil
+		}
+
+		guard let reply = reply else { return }
+		ctcpReplyCooldown[key] = now
+
+		// Breadcrumb in the server console so the user can see that their
+		// client answered a CTCP request — matches the mIRC convention.
+		recordServer(Message(
+			sender: sender,
+			content: "CTCP \(command) — replied",
+			kind: .server
+		))
+
+		let payload = "\u{0001}\(command) \(reply)\u{0001}"
+		Task { [weak self] in
+			try? await self?.connection.send("NOTICE \(sender) :\(payload)")
 		}
 	}
 
