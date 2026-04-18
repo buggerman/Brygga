@@ -80,6 +80,37 @@ public final class IRCSession {
 		runTask = nil
 	}
 
+	/// User-initiated disconnect that keeps the session/server in place but
+	/// suppresses auto-reconnect. Call `reconnect()` to bring it back.
+	public func disconnect(quitMessage: String? = nil) async {
+		userDisconnected = true
+		reconnectTask?.cancel()
+		reconnectTask = nil
+		await connection.disconnect(quitMessage: quitMessage)
+	}
+
+	/// Clears the user-initiated-disconnect flag and attempts to bring the
+	/// connection back up. Auto-reconnect resumes on subsequent drops.
+	public func reconnect() {
+		userDisconnected = false
+		reconnectAttempt = 0
+		reconnectTask?.cancel()
+		reconnectTask = nil
+		Task { [weak self] in
+			guard let self = self else { return }
+			do {
+				try await self.connection.connect()
+			} catch {
+				self.server.messages.append(Message(
+					sender: "**",
+					content: "reconnect failed: \(error)",
+					kind: .server
+				))
+				self.scheduleReconnectIfNeeded()
+			}
+		}
+	}
+
 	// MARK: - Commands
 
 	public func join(_ channel: String) async throws {

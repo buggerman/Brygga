@@ -158,6 +158,19 @@ public final class AppState {
 		return server
 	}
 
+	/// User-initiated disconnect for a single server. Keeps the server in
+	/// the sidebar and persisted config, but suppresses auto-reconnect.
+	public func disconnectServer(id: String, quitMessage: String? = "Brygga") async {
+		guard let session = sessions[id] else { return }
+		await session.disconnect(quitMessage: quitMessage)
+	}
+
+	/// Brings a previously-disconnected server back online.
+	public func reconnectServer(id: String) {
+		guard let session = sessions[id] else { return }
+		session.reconnect()
+	}
+
 	/// Sends QUIT and tears down every active session. Call this before
 	/// terminating the process so the server sees a clean client shutdown.
 	public func disconnectAll(quitMessage: String? = nil) async {

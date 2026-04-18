@@ -64,6 +64,21 @@ struct SidebarView: View {
 					ForEach(appState.servers) { server in
 						ServerRow(server: server)
 							.tag(Optional(server.id))
+							.contextMenu {
+								if server.state == .disconnected {
+									Button("Connect") {
+										appState.reconnectServer(id: server.id)
+									}
+								} else {
+									Button("Disconnect") {
+										Task { await appState.disconnectServer(id: server.id) }
+									}
+								}
+								Divider()
+								Button("Remove Server", role: .destructive) {
+									appState.removeServer(id: server.id)
+								}
+							}
 
 						ForEach(server.channels) { channel in
 							ChannelRow(channel: channel)
