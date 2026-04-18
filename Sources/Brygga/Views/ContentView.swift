@@ -162,7 +162,8 @@ struct ChatView: View {
 				Divider()
 				InputBar(
 					nickname: appState.selectedServer?.nickname ?? "",
-					draft: $draft
+					draft: $draft,
+					suggestions: channel.users.map { $0.nickname }
 				) {
 					submit(channel: channel)
 				}
@@ -442,7 +443,19 @@ struct InputBar: View {
 	let nickname: String
 	@Binding var draft: String
 	var placeholder: String = "Message"
+	var suggestions: [String] = []
 	let onSubmit: () -> Void
+
+	// Completion cycle state.
+	@State private var completionBase: String = ""
+	@State private var completionPrefix: String = ""
+	@State private var completionMatches: [String] = []
+	@State private var completionIndex: Int = 0
+
+	// Input history.
+	@State private var history: [String] = []
+	@State private var historyIndex: Int? = nil
+	@State private var draftBeforeHistory: String = ""
 
 	var body: some View {
 		HStack(spacing: 6) {
@@ -456,10 +469,113 @@ struct InputBar: View {
 			TextField(placeholder, text: $draft)
 				.textFieldStyle(.plain)
 				.font(.system(.body, design: .monospaced))
-				.onSubmit(onSubmit)
+				.onSubmit(handleSubmit)
+				.onKeyPress(.tab) {
+					handleTab()
+					return .handled
+				}
+				.onKeyPress(.upArrow) {
+					handleHistoryUp()
+					return .handled
+				}
+				.onKeyPress(.downArrow) {
+					handleHistoryDown()
+					return .handled
+				}
+				.onChange(of: draft) { _, _ in
+					// Any external edit resets completion cycle.
+					if completionPrefix.isEmpty { return }
+					if !draft.hasSuffix(completionMatches.indices.contains(completionIndex)
+						? completionMatches[completionIndex] : "") {
+						resetCompletion()
+					}
+				}
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)
+	}
+
+	private func handleSubmit() {
+		let trimmed = draft.trimmingCharacters(in: .whitespaces)
+		if !trimmed.isEmpty {
+			history.append(trimmed)
+			if history.count > 100 { history.removeFirst(history.count - 100) }
+		}
+		historyIndex = nil
+		resetCompletion()
+		onSubmit()
+	}
+
+	// MARK: - Tab completion
+
+	private func handleTab() {
+		guard !suggestions.isEmpty else { return }
+
+		// Starting a new cycle: find the word-under-cursor prefix.
+		if completionPrefix.isEmpty {
+			let (base, prefix) = splitLastWord(draft)
+			let lowered = prefix.lowercased()
+			let matches = suggestions.filter { $0.lowercased().hasPrefix(lowered) }
+			guard !matches.isEmpty else { return }
+			completionBase = base
+			completionPrefix = prefix
+			completionMatches = matches.sorted(by: { $0.lowercased() < $1.lowercased() })
+			completionIndex = 0
+		} else {
+			completionIndex = (completionIndex + 1) % completionMatches.count
+		}
+		apply(match: completionMatches[completionIndex])
+	}
+
+	private func apply(match: String) {
+		// Add ": " after nick if it's at the start of the line (mIRC-style).
+		let suffix = completionBase.isEmpty ? ": " : ""
+		draft = completionBase + match + suffix
+	}
+
+	private func resetCompletion() {
+		completionBase = ""
+		completionPrefix = ""
+		completionMatches = []
+		completionIndex = 0
+	}
+
+	/// Split `s` at the last whitespace: returns (everythingUpToAndIncludingLastSpace, wordAfter).
+	private func splitLastWord(_ s: String) -> (String, String) {
+		if let lastSpace = s.lastIndex(where: { $0 == " " }) {
+			let base = String(s[...lastSpace])
+			let word = String(s[s.index(after: lastSpace)...])
+			return (base, word)
+		}
+		return ("", s)
+	}
+
+	// MARK: - Input history
+
+	private func handleHistoryUp() {
+		guard !history.isEmpty else { return }
+		if historyIndex == nil {
+			draftBeforeHistory = draft
+			historyIndex = history.count - 1
+		} else if let idx = historyIndex, idx > 0 {
+			historyIndex = idx - 1
+		} else {
+			return
+		}
+		if let idx = historyIndex {
+			draft = history[idx]
+		}
+	}
+
+	private func handleHistoryDown() {
+		guard let idx = historyIndex else { return }
+		if idx + 1 < history.count {
+			historyIndex = idx + 1
+			draft = history[idx + 1]
+		} else {
+			historyIndex = nil
+			draft = draftBeforeHistory
+		}
 	}
 }
 
