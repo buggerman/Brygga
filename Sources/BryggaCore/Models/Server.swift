@@ -15,18 +15,30 @@ public final class Server: Identifiable {
 	public var port: Int
 	public var useTLS: Bool
 	public var nickname: String
+	public var saslAccount: String?
+	public var saslPassword: String?
 	public var channels: [Channel] = []
 	public var messages: [Message] = []
 	public var state: ConnectionState = .disconnected
 	public var isExpanded: Bool = true
 
-	public init(name: String, host: String, port: Int = 6697, useTLS: Bool = true, nickname: String) {
+	public init(
+		name: String,
+		host: String,
+		port: Int = 6697,
+		useTLS: Bool = true,
+		nickname: String,
+		saslAccount: String? = nil,
+		saslPassword: String? = nil
+	) {
 		self.id = UUID().uuidString
 		self.name = name
 		self.host = host
 		self.port = port
 		self.useTLS = useTLS
 		self.nickname = nickname
+		self.saslAccount = saslAccount
+		self.saslPassword = saslPassword
 	}
 
 	public enum ConnectionState: Equatable, Sendable {

@@ -21,6 +21,8 @@ public actor IRCConnection {
 	public nonisolated let nickname: String
 	public nonisolated let username: String
 	public nonisolated let realName: String
+	public nonisolated let saslAccount: String?
+	public nonisolated let saslPassword: String?
 
 	// MARK: - State
 
@@ -64,7 +66,9 @@ public actor IRCConnection {
 		useTLS: Bool = true,
 		nickname: String,
 		username: String? = nil,
-		realName: String? = nil
+		realName: String? = nil,
+		saslAccount: String? = nil,
+		saslPassword: String? = nil
 	) {
 		self.host = host
 		self.port = port
@@ -72,6 +76,8 @@ public actor IRCConnection {
 		self.nickname = nickname
 		self.username = username ?? nickname
 		self.realName = realName ?? nickname
+		self.saslAccount = saslAccount
+		self.saslPassword = saslPassword
 
 		var msgContinuation: AsyncStream<IRCLineParserResult>.Continuation!
 		self.messages = AsyncStream { continuation in
@@ -194,9 +200,20 @@ public actor IRCConnection {
 
 	// MARK: - Private lifecycle
 
+	private var saslInProgress: Bool = false
+
+	private var useSasl: Bool {
+		guard let account = saslAccount, !account.isEmpty,
+		      let password = saslPassword, !password.isEmpty else { return false }
+		return true
+	}
+
 	private func onReady() async {
 		setState(.registering)
-		// IRC registration handshake (no PASS for now).
+		if useSasl {
+			saslInProgress = true
+			try? await send("CAP LS 302")
+		}
 		try? await send("NICK \(nickname)")
 		try? await send("USER \(username) 0 * :\(realName)")
 		startReadLoop()
@@ -288,12 +305,74 @@ public actor IRCConnection {
 			}
 
 			if let parsed = IRCLineParser.parse(text) {
+				// Drive SASL handshake internally; still yield the lines so the
+				// UI's server console can log them.
+				if saslInProgress {
+					handleSaslLine(parsed)
+				}
 				// Registration complete when 001 (RPL_WELCOME) arrives.
 				if parsed.commandNumeric == 1 && state == .registering {
 					setState(.active)
 				}
 				messageContinuation.yield(parsed)
 			}
+		}
+	}
+
+	private func handleSaslLine(_ msg: IRCLineParserResult) {
+		switch msg.command {
+		case "CAP":
+			// Params: [target, subcommand, ...data]
+			guard msg.params.count >= 2 else { return }
+			let subcommand = msg.params[1].uppercased()
+			switch subcommand {
+			case "LS":
+				// Caps list is either params[2] (single) or params[3] (multi-line "*" marker).
+				let capsField = msg.params.last ?? ""
+				let caps = capsField.split(separator: " ").map {
+					String($0.split(separator: "=").first ?? "")
+				}
+				if caps.contains("sasl") {
+					Task { [weak self] in try? await self?.send("CAP REQ :sasl") }
+				} else {
+					// Server doesn't support SASL; close caps and continue unauthenticated.
+					Task { [weak self] in try? await self?.send("CAP END") }
+					saslInProgress = false
+				}
+			case "ACK":
+				let acked = (msg.params.last ?? "").lowercased()
+				if acked.contains("sasl") {
+					Task { [weak self] in try? await self?.send("AUTHENTICATE PLAIN") }
+				}
+			case "NAK":
+				Task { [weak self] in try? await self?.send("CAP END") }
+				saslInProgress = false
+			default:
+				break
+			}
+		case "AUTHENTICATE":
+			// Server sends "AUTHENTICATE +" to request credentials.
+			guard msg.params.first == "+",
+			      let account = saslAccount,
+			      let password = saslPassword else { return }
+			let payload = "\0\(account)\0\(password)"
+			let encoded = Data(payload.utf8).base64EncodedString()
+			Task { [weak self] in try? await self?.send("AUTHENTICATE \(encoded)") }
+		default:
+			break
+		}
+		// 900-series SASL numerics.
+		switch msg.commandNumeric {
+		case 903:
+			// RPL_SASLSUCCESS — close caps and let registration finish.
+			Task { [weak self] in try? await self?.send("CAP END") }
+			saslInProgress = false
+		case 902, 904, 905, 906, 907:
+			// SASL failure — still close caps so registration can proceed.
+			Task { [weak self] in try? await self?.send("CAP END") }
+			saslInProgress = false
+		default:
+			break
 		}
 	}
 

@@ -18,9 +18,12 @@ public enum ServerStore {
 		public var nickname: String
 		public var autoJoinChannels: [String]
 		public var openQueries: [String] = []
+		public var saslAccount: String?
+		public var saslPassword: String?
 
 		enum CodingKeys: String, CodingKey {
-			case name, host, port, useTLS, nickname, autoJoinChannels, openQueries
+			case name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
+			     saslAccount, saslPassword
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -32,10 +35,21 @@ public enum ServerStore {
 			nickname = try c.decode(String.self, forKey: .nickname)
 			autoJoinChannels = try c.decode([String].self, forKey: .autoJoinChannels)
 			openQueries = try c.decodeIfPresent([String].self, forKey: .openQueries) ?? []
+			saslAccount = try c.decodeIfPresent(String.self, forKey: .saslAccount)
+			saslPassword = try c.decodeIfPresent(String.self, forKey: .saslPassword)
 		}
 
-		public init(name: String, host: String, port: UInt16, useTLS: Bool, nickname: String,
-		            autoJoinChannels: [String], openQueries: [String]) {
+		public init(
+			name: String,
+			host: String,
+			port: UInt16,
+			useTLS: Bool,
+			nickname: String,
+			autoJoinChannels: [String],
+			openQueries: [String],
+			saslAccount: String? = nil,
+			saslPassword: String? = nil
+		) {
 			self.name = name
 			self.host = host
 			self.port = port
@@ -43,6 +57,8 @@ public enum ServerStore {
 			self.nickname = nickname
 			self.autoJoinChannels = autoJoinChannels
 			self.openQueries = openQueries
+			self.saslAccount = saslAccount
+			self.saslPassword = saslPassword
 		}
 	}
 

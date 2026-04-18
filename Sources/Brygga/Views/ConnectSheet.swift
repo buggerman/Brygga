@@ -17,6 +17,8 @@ struct ConnectSheet: View {
 	@State private var portText: String = "6697"
 	@State private var nickname: String = NSUserName()
 	@State private var useTLS: Bool = true
+	@State private var saslAccount: String = ""
+	@State private var saslPassword: String = ""
 
 	private var port: UInt16? { UInt16(portText) }
 
@@ -38,12 +40,19 @@ struct ConnectSheet: View {
 			.padding(.bottom, 10)
 
 			Form {
-				TextField("Name", text: $name, prompt: Text("Libera"))
-				TextField("Host", text: $host)
-				TextField("Port", text: $portText)
-					.monospaced()
-				TextField("Nickname", text: $nickname)
-				Toggle("Use TLS", isOn: $useTLS)
+				Section {
+					TextField("Name", text: $name, prompt: Text("Libera"))
+					TextField("Host", text: $host)
+					TextField("Port", text: $portText)
+						.monospaced()
+					TextField("Nickname", text: $nickname)
+					Toggle("Use TLS", isOn: $useTLS)
+				}
+				Section("SASL (optional)") {
+					TextField("Account", text: $saslAccount, prompt: Text("usually same as nickname"))
+						.textContentType(.username)
+					SecureField("Password", text: $saslPassword)
+				}
 			}
 			.formStyle(.grouped)
 			.padding(.horizontal, 8)
@@ -68,12 +77,17 @@ struct ConnectSheet: View {
 
 	private func submit() {
 		guard let port = port else { return }
+		let trimmedAccount = saslAccount.trimmingCharacters(in: .whitespaces)
+		let account = trimmedAccount.isEmpty ? nil : trimmedAccount
+		let password = saslPassword.isEmpty ? nil : saslPassword
 		appState.addServer(
 			name: name,
 			host: host.trimmingCharacters(in: .whitespaces),
 			port: port,
 			useTLS: useTLS,
-			nickname: nickname.trimmingCharacters(in: .whitespaces)
+			nickname: nickname.trimmingCharacters(in: .whitespaces),
+			saslAccount: account,
+			saslPassword: password
 		)
 		dismiss()
 	}

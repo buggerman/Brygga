@@ -45,7 +45,9 @@ public final class AppState {
 				port: config.port,
 				useTLS: config.useTLS,
 				nickname: config.nickname,
-				autoJoinChannels: config.autoJoinChannels
+				autoJoinChannels: config.autoJoinChannels,
+				saslAccount: config.saslAccount,
+				saslPassword: config.saslPassword
 			)
 			for nick in config.openQueries {
 				server.channels.append(Channel(name: nick))
@@ -68,7 +70,9 @@ public final class AppState {
 				useTLS: server.useTLS,
 				nickname: server.nickname,
 				autoJoinChannels: joined,
-				openQueries: queries
+				openQueries: queries,
+				saslAccount: server.saslAccount,
+				saslPassword: server.saslPassword
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -123,20 +127,26 @@ public final class AppState {
 		port: UInt16 = 6697,
 		useTLS: Bool = true,
 		nickname: String,
-		autoJoinChannels: [String] = []
+		autoJoinChannels: [String] = [],
+		saslAccount: String? = nil,
+		saslPassword: String? = nil
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
 			host: host,
 			port: Int(port),
 			useTLS: useTLS,
-			nickname: nickname
+			nickname: nickname,
+			saslAccount: saslAccount,
+			saslPassword: saslPassword
 		)
 		let connection = IRCConnection(
 			host: host,
 			port: port,
 			useTLS: useTLS,
-			nickname: nickname
+			nickname: nickname,
+			saslAccount: saslAccount,
+			saslPassword: saslPassword
 		)
 		let session = IRCSession(server: server, connection: connection)
 		session.autoJoinChannels = autoJoinChannels
