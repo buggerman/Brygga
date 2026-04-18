@@ -388,6 +388,12 @@ struct MessageList: View {
 struct MessageRow: View {
 	let message: Message
 
+	private var actionAttributedString: AttributedString {
+		var composed = AttributedString(message.sender + " ")
+		composed.append(AttributedString.fromIRC(message.content))
+		return composed
+	}
+
 	var body: some View {
 		rowBody
 			.padding(.vertical, message.isHighlight ? 2 : 0)
@@ -419,7 +425,7 @@ struct MessageRow: View {
 				Text(message.sender)
 					.font(.system(.body, design: .monospaced))
 					.foregroundStyle(Color.accentColor)
-				Text(message.content)
+				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
 					.textSelection(.enabled)
 					.frame(maxWidth: .infinity, alignment: .leading)
@@ -427,7 +433,7 @@ struct MessageRow: View {
 				Text("-\(message.sender)-")
 					.font(.system(.body, design: .monospaced))
 					.foregroundStyle(.orange)
-				Text(message.content)
+				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
 					.foregroundStyle(.orange)
 					.textSelection(.enabled)
@@ -435,7 +441,7 @@ struct MessageRow: View {
 			case .action:
 				Text("*")
 					.foregroundStyle(.secondary)
-				Text("\(message.sender) \(message.content)")
+				Text(actionAttributedString)
 					.font(.system(.body, design: .monospaced))
 					.italic()
 					.frame(maxWidth: .infinity, alignment: .leading)
@@ -684,5 +690,45 @@ struct UserListView: View {
 		} else {
 			ContentUnavailableView("No Users", systemImage: "person.2")
 		}
+	}
+}
+
+// MARK: - mIRC control-code rendering
+
+extension AttributedString {
+	/// Builds a styled `AttributedString` from an IRC message body by
+	/// parsing mIRC control codes (`^B`, `^I`, `^U`, `^R`, `^O`, `^K[,bg]`,
+	/// `^S`) and mapping them onto SwiftUI attributes.
+	static func fromIRC(_ text: String) -> AttributedString {
+		let runs = IRCFormatting.parse(text)
+		var result = AttributedString()
+		for run in runs {
+			var piece = AttributedString(run.text)
+
+			// Font: monospaced + optional bold/italic composition.
+			var font = Font.system(.body, design: .monospaced)
+			if run.style.bold { font = font.bold() }
+			if run.style.italic { font = font.italic() }
+			piece.font = font
+
+			if run.style.underline { piece.underlineStyle = .single }
+			if run.style.strikethrough { piece.strikethroughStyle = .single }
+
+			// Reverse swaps fg/bg before we resolve colors.
+			var fgIdx = run.style.foreground
+			var bgIdx = run.style.background
+			if run.style.reverse {
+				(fgIdx, bgIdx) = (bgIdx ?? 0, fgIdx ?? 99)
+			}
+			if let fg = fgIdx, let rgb = IRCFormatting.color(for: fg) {
+				piece.foregroundColor = Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+			}
+			if let bg = bgIdx, let rgb = IRCFormatting.color(for: bg) {
+				piece.backgroundColor = Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+			}
+
+			result.append(piece)
+		}
+		return result
 	}
 }
