@@ -4,7 +4,7 @@ Rules for AI coding agents working in this repo. Read before editing.
 
 ## Project
 
-Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: **macOS 26+, Apple Silicon only**. Liquid Glass is the baseline design language — no pre-26 fallbacks, no Intel builds. Default branch: `main`.
+Brygga is a native macOS IRC client written in pure Swift + SwiftUI. Target: **macOS 15 Sequoia or later, Apple Silicon only**. Policy: build for the latest APIs, don't hold back for backward compat; the minimum OS is wherever the code naturally lands. If a new feature requires a newer API, raise the floor — don't add `@available` guards. Sequoia is today's floor because `.containerBackground(_:for: .window)` is macOS 15+. Liquid Glass is the design direction on macOS 26. No Intel builds. CI builds with Xcode 26 / Swift 6.2 on a macOS 26 runner but targets macOS 15. Default branch: `main`.
 
 Feature scope and priority are defined in [docs/PARITY.md](docs/PARITY.md) — the mIRC-parity plan. Before proposing a new feature, check whether it's already in Phase 1/2/3 or explicitly out of scope.
 

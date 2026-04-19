@@ -6,7 +6,7 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 
 ## Requirements
 
-- macOS 26 or later (earlier versions not supported — Brygga uses Liquid Glass)
+- macOS 15 Sequoia or later (looks best on macOS 26 with Liquid Glass materials, but falls back gracefully to the standard `.bar` / `.thinMaterial` / `.regularMaterial` surfaces on earlier releases)
 - Apple Silicon only (arm64 — no Intel builds)
 - Xcode 26 or later (for building from source)
 - Swift 6.0+

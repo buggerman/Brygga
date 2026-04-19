@@ -4,7 +4,14 @@ import PackageDescription
 let package = Package(
 	name: "Brygga",
 	platforms: [
-		.macOS(.v26)
+		// macOS 15 Sequoia is the real floor:
+		// - `.containerBackground(_:for: .window)` requires macOS 15.
+		// - `@Observable`, `@Bindable`, `.inspector`, `.onKeyPress`,
+		//   `ContentUnavailableView` all ship from macOS 14, but one newer
+		//   API pulls the whole floor up.
+		// Policy: build for latest, raise the floor as needed, no
+		// `@available` guards.
+		.macOS(.v15)
 	],
 	products: [
 		.executable(name: "Brygga", targets: ["Brygga"]),

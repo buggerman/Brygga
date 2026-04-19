@@ -1,6 +1,6 @@
 # mIRC Feature Parity Plan
 
-Brygga aims for **feature parity with mIRC** for everything a daily-driver IRC user expects, while being deliberately modern-native (macOS 26, SwiftUI, Liquid Glass) and excluding obsolete or Windows-specific features. This document is the reference for what's in scope, out of scope, and in what order.
+Brygga aims for **feature parity with mIRC** for everything a daily-driver IRC user expects, while being deliberately modern-native (macOS 15 Sequoia or later, SwiftUI, Liquid Glass when running on macOS 26) and excluding obsolete or Windows-specific features. This document is the reference for what's in scope, out of scope, and in what order.
 
 ## Already shipped
 
