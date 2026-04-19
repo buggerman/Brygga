@@ -376,6 +376,7 @@ struct ChatView: View {
 				) {
 					submit(channel: channel)
 				}
+				.id(channel.id)
 			} else if let server = appState.selectedServer {
 				ServerConsoleHeader(server: server)
 				Divider()
@@ -397,6 +398,17 @@ struct ChatView: View {
 			}
 		}
 		.onChange(of: appState.selection) { oldValue, _ in
+			// Emit a final `done` typing indicator to the *departing* channel
+			// before the draft clears below — otherwise the `onChange(of: draft)`
+			// in `InputBar` would fire `done` against the *new* channel's
+			// `onTyping` closure, leaving the old channel stuck as "active"
+			// on other clients.
+			if !draft.isEmpty,
+			   let oldID = oldValue,
+			   let oldChannel = appState.channel(byID: oldID),
+			   let oldSession = session(for: oldChannel) {
+				Task { try? await oldSession.sendTyping(state: "done", to: oldChannel.name) }
+			}
 			draft = ""
 			// Snap the just-left channel's read marker to its current last
 			// message so returning later shows a "new" divider above anything
@@ -453,6 +465,13 @@ struct ChatView: View {
 	private func sendTyping(_ state: String, in channel: Channel) {
 		guard let session = appState.selectedSession else { return }
 		Task { try? await session.sendTyping(state: state, to: channel.name) }
+	}
+
+	private func session(for channel: Channel) -> IRCSession? {
+		for server in appState.servers where server.channels.contains(where: { $0.id == channel.id }) {
+			return appState.sessions[server.id]
+		}
+		return nil
 	}
 
 	private func submit(channel: Channel) {
