@@ -12,4 +12,5 @@ import Foundation
 public enum PreferencesKeys {
 	public static let showJoinsParts = "brygga.showJoinsParts"
 	public static let highlightKeywordsRaw = "brygga.highlightKeywordsRaw"
+	public static let autoJoinOnInvite = "brygga.autoJoinOnInvite"
 }

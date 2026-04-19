@@ -261,6 +261,7 @@ public final class IRCSession {
 		case "NICK":    handleNick(message)
 		case "TOPIC":   handleTopic(message)
 		case "KICK":    handleKick(message)
+		case "INVITE":  handleInvite(message)
 		case "CHGHOST": handleChghost(message)
 		case "ACCOUNT": handleAccount(message)
 		case "AWAY":    handleAway(message)
@@ -710,6 +711,30 @@ public final class IRCSession {
 	}
 
 	// MARK: - IRCv3 extension handlers
+
+	/// INVITE <us> <channel> — server telling us we've been invited by someone.
+	/// Log to the server console; auto-join if the preference is on.
+	private func handleInvite(_ message: IRCLineParserResult) {
+		// Expected params: [invitee, channel]. Some networks put channel in trailing.
+		guard message.params.count >= 2 else { return }
+		let invitee = message.params[0]
+		let channelName = message.params[1]
+		let inviter = message.senderNickname ?? message.senderString ?? "?"
+
+		// Only act on invites addressed to us.
+		guard invitee.lowercased() == server.nickname.lowercased() else { return }
+
+		recordServer(Message(
+			timestamp: messageTimestamp(message),
+			sender: inviter,
+			content: "invited you to \(channelName)",
+			kind: .server
+		))
+
+		if UserDefaults.standard.bool(forKey: PreferencesKeys.autoJoinOnInvite) {
+			Task { try? await join(channelName) }
+		}
+	}
 
 	/// CHGHOST <newuser> <newhost> — user's username/host changed (typically after SASL or vhost assignment).
 	private func handleChghost(_ message: IRCLineParserResult) {

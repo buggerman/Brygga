@@ -299,6 +299,12 @@ struct ChatView: View {
 				session.server.awayMessage = reason
 				Task { try? await session.connection.send("AWAY :\(reason)") }
 			}
+		case "INVITE":
+			let parts = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).map(String.init)
+			guard let target = parts.first else { return }
+			let channelName: String? = parts.count > 1 ? parts[1] : channel?.name
+			guard let channelName = channelName else { return }
+			Task { try? await session.connection.send("INVITE \(target) \(channelName)") }
 		case "LIST":
 			// Clear prior listing and open the browser; the sheet's task will
 			// fire the LIST command against the server.

@@ -24,11 +24,13 @@ struct PreferencesView: View {
 
 struct GeneralPane: View {
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
+	@AppStorage(PreferencesKeys.autoJoinOnInvite) private var autoJoinOnInvite = false
 
 	var body: some View {
 		Form {
 			Section("Channels") {
 				Toggle("Show joins and parts in channels", isOn: $showJoinsParts)
+				Toggle("Auto-join channels when invited", isOn: $autoJoinOnInvite)
 			}
 		}
 		.formStyle(.grouped)
