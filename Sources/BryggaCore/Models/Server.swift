@@ -45,6 +45,7 @@ public final class Server: Identifiable {
 	public var lastPingAt: Date?
 
 	public init(
+		id: String? = nil,
 		name: String,
 		host: String,
 		port: Int = 6697,
@@ -53,7 +54,11 @@ public final class Server: Identifiable {
 		saslAccount: String? = nil,
 		saslPassword: String? = nil
 	) {
-		self.id = UUID().uuidString
+		// Accept a caller-supplied id so `AppState.restoreFromStore` can
+		// rebind a server to its previous-launch UUID, which the
+		// scrollback store uses as a directory key. Fresh servers fall
+		// back to a new UUID.
+		self.id = id ?? UUID().uuidString
 		self.name = name
 		self.host = host
 		self.port = port

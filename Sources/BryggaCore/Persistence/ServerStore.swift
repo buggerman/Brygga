@@ -11,6 +11,13 @@ import Foundation
 public enum ServerStore {
 
 	public struct ServerConfig: Codable, Equatable {
+		/// Stable identifier for this server across launches. Keys the
+		/// scrollback directory on disk (`scrollback/<id>/<target>.log`)
+		/// so message history survives relaunches. `nil` when migrating
+		/// from a pre-0.1.1 `servers.json` that never stored an id — in
+		/// that case `AppState.addServer` assigns a fresh UUID which then
+		/// lands in the next persist write.
+		public var id: String?
 		public var name: String
 		public var host: String
 		public var port: UInt16
@@ -28,13 +35,14 @@ public enum ServerStore {
 		public var clientCertificatePassphrase: String?
 
 		enum CodingKeys: String, CodingKey {
-			case name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
+			case id, name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
 			     saslAccount, saslPassword, ignoreList, notifyList, performCommands,
 			     pinnedChannels, clientCertificatePath, clientCertificatePassphrase
 		}
 
 		public init(from decoder: Decoder) throws {
 			let c = try decoder.container(keyedBy: CodingKeys.self)
+			id = try c.decodeIfPresent(String.self, forKey: .id)
 			name = try c.decode(String.self, forKey: .name)
 			host = try c.decode(String.self, forKey: .host)
 			port = try c.decode(UInt16.self, forKey: .port)
@@ -53,6 +61,7 @@ public enum ServerStore {
 		}
 
 		public init(
+			id: String? = nil,
 			name: String,
 			host: String,
 			port: UInt16,
@@ -69,6 +78,7 @@ public enum ServerStore {
 			clientCertificatePath: String? = nil,
 			clientCertificatePassphrase: String? = nil
 		) {
+			self.id = id
 			self.name = name
 			self.host = host
 			self.port = port

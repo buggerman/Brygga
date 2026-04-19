@@ -193,6 +193,7 @@ public final class AppState {
 				.filter { $0.isPrivateMessage }
 				.map { $0.name }
 			return ServerStore.ServerConfig(
+				id: server.id,
 				name: server.name,
 				host: server.host,
 				port: UInt16(server.port),
@@ -268,6 +269,7 @@ public final class AppState {
 	/// connection. Returns the newly-added Server.
 	@discardableResult
 	public func addServer(
+		id: String? = nil,
 		name: String,
 		host: String,
 		port: UInt16 = 6697,
@@ -284,6 +286,7 @@ public final class AppState {
 		clientCertificatePassphrase: String? = nil
 	) -> Server {
 		let server = Server(
+			id: id,
 			name: name.isEmpty ? host : name,
 			host: host,
 			port: Int(port),
