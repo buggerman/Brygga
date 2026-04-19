@@ -81,6 +81,7 @@ public final class IRCSession {
 		userDisconnected = true
 		reconnectTask?.cancel()
 		reconnectTask = nil
+		stopNotifyPolling()
 		runTask?.cancel()
 		runTask = nil
 	}
@@ -401,12 +402,16 @@ public final class IRCSession {
 			for name in autoJoinChannels {
 				Task { try? await join(name) }
 			}
+			notifyOnline = []
+			startNotifyPolling()
 		case 332:
 			handleTopicReply(message)
 		case 353:
 			handleNamesReply(message)
 		case 366:
 			break
+		case 303:
+			handleISONReply(message)
 		case 305:
 			// RPL_UNAWAY — we're no longer marked away.
 			server.isAway = false
@@ -530,6 +535,88 @@ public final class IRCSession {
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
 		}
+	}
+
+	// MARK: - Notify / buddy list
+
+	private var notifyOnline: Set<String> = []
+	private var notifyPollTask: Task<Void, Never>?
+	private static let notifyPollInterval: TimeInterval = 60
+
+	public func addNotify(_ nick: String) {
+		let trimmed = nick.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty else { return }
+		let lc = trimmed.lowercased()
+		guard !server.notifyList.contains(where: { $0.lowercased() == lc }) else { return }
+		server.notifyList.append(trimmed)
+		onChannelsChanged?()
+	}
+
+	@discardableResult
+	public func removeNotify(_ nick: String) -> Bool {
+		let lc = nick.lowercased()
+		let before = server.notifyList.count
+		server.notifyList.removeAll { $0.lowercased() == lc }
+		let removed = server.notifyList.count != before
+		if removed {
+			notifyOnline.remove(lc)
+			onChannelsChanged?()
+		}
+		return removed
+	}
+
+	private func startNotifyPolling() {
+		stopNotifyPolling()
+		notifyPollTask = Task { [weak self] in
+			while !Task.isCancelled {
+				try? await Task.sleep(nanoseconds: UInt64(Self.notifyPollInterval * 1_000_000_000))
+				guard let self = self, !Task.isCancelled else { return }
+				await self.sendNotifyPoll()
+			}
+		}
+		// Fire one immediate poll so we don't wait 60s to see initial status.
+		Task { [weak self] in await self?.sendNotifyPoll() }
+	}
+
+	private func stopNotifyPolling() {
+		notifyPollTask?.cancel()
+		notifyPollTask = nil
+	}
+
+	private func sendNotifyPoll() async {
+		let nicks = server.notifyList
+		guard !nicks.isEmpty else { return }
+		try? await connection.send("ISON \(nicks.joined(separator: " "))")
+	}
+
+	/// 303 RPL_ISON — params: [me, :online nick1 nick2 ...]
+	private func handleISONReply(_ message: IRCLineParserResult) {
+		guard message.params.count >= 2 else { return }
+		let onlineList = message.params[1]
+			.split(separator: " ")
+			.map { String($0).lowercased() }
+		let nowOnline = Set(onlineList)
+		let watched = Set(server.notifyList.map { $0.lowercased() })
+		let effective = nowOnline.intersection(watched)
+
+		// Original-case lookup for display.
+		let byLower: [String: String] = Dictionary(
+			uniqueKeysWithValues: server.notifyList.map { ($0.lowercased(), $0) }
+		)
+
+		let justCameOn = effective.subtracting(notifyOnline).sorted()
+		let justLeft = notifyOnline.subtracting(effective).sorted()
+
+		for lc in justCameOn {
+			let display = byLower[lc] ?? lc
+			recordServer(Message(sender: display, content: "is online", kind: .server))
+		}
+		for lc in justLeft {
+			let display = byLower[lc] ?? lc
+			recordServer(Message(sender: display, content: "went offline", kind: .server))
+		}
+
+		notifyOnline = effective
 	}
 
 	// MARK: - Ignore list

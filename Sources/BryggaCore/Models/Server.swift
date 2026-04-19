@@ -22,6 +22,7 @@ public final class Server: Identifiable {
 	public var channelListing: [ChannelListing] = []
 	public var isListingInProgress: Bool = false
 	public var ignoreList: [String] = []
+	public var notifyList: [String] = []
 	public var isAway: Bool = false
 	public var awayMessage: String?
 	public var state: ConnectionState = .disconnected

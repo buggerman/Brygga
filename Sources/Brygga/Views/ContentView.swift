@@ -282,6 +282,33 @@ struct ChatView: View {
 		draft = ""
 	}
 
+	private func handleNotifyCommand(_ rest: String, session: IRCSession) {
+		let arg = rest.trimmingCharacters(in: .whitespaces)
+		if arg.isEmpty {
+			let list = session.server.notifyList
+			if list.isEmpty {
+				session.recordServer(Message(sender: "*", content: "notify list is empty", kind: .server))
+			} else {
+				for nick in list {
+					session.recordServer(Message(sender: "*", content: "watching: \(nick)", kind: .server))
+				}
+			}
+			return
+		}
+		if arg.hasPrefix("-r ") {
+			let target = String(arg.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+			let removed = session.removeNotify(target)
+			session.recordServer(Message(
+				sender: "*",
+				content: removed ? "unwatched \(target)" : "not in notify list: \(target)",
+				kind: .server
+			))
+			return
+		}
+		session.addNotify(arg)
+		session.recordServer(Message(sender: "*", content: "watching \(arg)", kind: .server))
+	}
+
 	private func handleIgnore(_ rest: String, session: IRCSession) {
 		let arg = rest.trimmingCharacters(in: .whitespaces)
 		if arg.isEmpty {
@@ -363,6 +390,8 @@ struct ChatView: View {
 				content: "unignored \(rest)",
 				kind: .server
 			))
+		case "NOTIFY":
+			handleNotifyCommand(rest, session: session)
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
 			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)
