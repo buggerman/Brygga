@@ -58,6 +58,14 @@ struct BryggaApp: App {
 			}
 		}
 
+		WindowGroup(id: "channel", for: String.self) { $channelID in
+			if let id = channelID {
+				DetachedChannelView(channelID: id)
+					.environment(appState)
+					.frame(minWidth: 600, minHeight: 400)
+			}
+		}
+
 		Settings {
 			PreferencesView()
 				.environment(appState)

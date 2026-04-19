@@ -160,6 +160,7 @@ struct ChannelRow: View {
 @MainActor
 struct ChatView: View {
 	@Environment(AppState.self) private var appState
+	@Environment(\.openWindow) private var openWindow
 	@State private var draft: String = ""
 	@State private var findQuery: String = ""
 	@State private var isFinding: Bool = false
@@ -229,6 +230,10 @@ struct ChatView: View {
 			}
 			.keyboardShortcut("f", modifiers: .command)
 			.hidden()
+
+			Button("Detach") { detach() }
+				.keyboardShortcut("d", modifiers: [.command, .shift])
+				.hidden()
 		}
 	}
 
@@ -245,6 +250,11 @@ struct ChatView: View {
 	private func closeFind() {
 		isFinding = false
 		findQuery = ""
+	}
+
+	private func detach() {
+		guard let channel = appState.selectedChannel else { return }
+		openWindow(id: "channel", value: channel.id)
 	}
 
 	private func submit(channel: Channel) {
@@ -1184,5 +1194,70 @@ extension AttributedString {
 			attributed[startIdx..<endIdx].underlineStyle = .single
 			attributed[startIdx..<endIdx].foregroundColor = Color.accentColor
 		}
+	}
+}
+
+// MARK: - Detached channel window
+
+/// Single-channel view presented in its own window via the `channel`
+/// `WindowGroup` scene. Mirrors the main-window `ChatView` but without
+/// a sidebar, inspector, or selection coupling. Shares `AppState` by
+/// reference, so messages / topic / user-list updates stay in sync.
+@MainActor
+struct DetachedChannelView: View {
+	let channelID: String
+	@Environment(AppState.self) private var appState
+	@State private var draft: String = ""
+
+	var body: some View {
+		if let channel = appState.channel(byID: channelID),
+		   let session = session(for: channel) {
+			VStack(spacing: 0) {
+				TopicBar(channel: channel)
+				Divider()
+				MessageList(channel: channel)
+				Divider()
+				InputBar(
+					nickname: session.server.nickname,
+					draft: $draft,
+					suggestions: channel.users.map(\.nickname)
+				) {
+					submit(channel: channel, session: session)
+				}
+			}
+			.navigationTitle(channel.name)
+		} else {
+			ContentUnavailableView {
+				Label("Channel not available", systemImage: "bubble.left")
+			} description: {
+				Text("The channel was closed or its server was removed.")
+			}
+		}
+	}
+
+	private func session(for channel: Channel) -> IRCSession? {
+		for server in appState.servers where server.channels.contains(where: { $0.id == channel.id }) {
+			return appState.sessions[server.id]
+		}
+		return nil
+	}
+
+	private func submit(channel: Channel, session: IRCSession) {
+		let trimmed = draft.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty else { return }
+		let sender = session.server.nickname
+
+		if trimmed.hasPrefix("/") {
+			// Detached windows forward slash input as raw IRC protocol. Full
+			// slash-command dispatch (which mutates sidebar state) lives in the
+			// main-window `ChatView`.
+			Task { try? await session.connection.send(String(trimmed.dropFirst())) }
+		} else {
+			for chunk in session.splitMessage(trimmed, for: channel.name) where !chunk.isEmpty {
+				session.record(Message(sender: sender, content: chunk, kind: .privmsg), in: channel)
+			}
+			Task { try? await session.sendMessage(to: channel.name, content: trimmed) }
+		}
+		draft = ""
 	}
 }
