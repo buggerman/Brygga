@@ -8,7 +8,7 @@ Phase 1 is effectively complete — everything a mIRC daily-driver expects (minu
 
 ### Connection and identity
 - TLS connect on 6697 via `NWConnection`
-- SASL authentication — SCRAM-SHA-256 preferred when the server advertises it (RFC 7677 exchange with PBKDF2 via CommonCrypto and HMAC/SHA-256 via CryptoKit), falls back to PLAIN otherwise
+- SASL authentication — EXTERNAL preferred when a PKCS#12 client certificate is configured and the server advertises it (TLS client auth via `sec_protocol_options_set_local_identity`); otherwise SCRAM-SHA-256 preferred when advertised (RFC 7677 exchange with PBKDF2 via CommonCrypto and HMAC/SHA-256 via CryptoKit); falls back to PLAIN
 - IRCv3 CAP negotiation: `sasl`, `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag`, `account-notify`, `away-notify`, `invite-notify`, `batch`, `chathistory` / `draft/chathistory`, `message-tags`
 - `server-time` tag used for message timestamps (accurate scrollback across reconnects)
 - `userhost-in-names` → populates `User.username` / `hostname` on NAMES
@@ -87,7 +87,7 @@ These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "mod
 4. ~~**Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).~~ Shipped — each channel gets its own `WindowGroup` window reusing `TopicBar` / `MessageList` / `InputBar` over a shared `AppState`.
 5. ~~**Favorites / pinned channels** in the sidebar.~~ Shipped — right-click → Pin to Favorites moves channels into a top sidebar section, `Cmd+1…9` jumps to the first nine pinned channels, pin state is persisted per server in `servers.json`.
 6. ~~**SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.~~ Shipped — auto-selected when the server advertises it in `CAP LS sasl=…`; verified against the RFC 7677 test vector.
-7. **SASL EXTERNAL** — client-certificate auth for networks that allow it.
+7. ~~**SASL EXTERNAL** — client-certificate auth for networks that allow it.~~ Shipped — PKCS#12 picker in the Connect sheet, cert path + optional passphrase persisted per server, TLS client identity presented via Network framework, EXTERNAL auto-selected when advertised.
 
 ## Phase 3 — Polish
 
@@ -118,6 +118,6 @@ Not building these, and not feeling bad about it:
 
 Phase 2 is up. Recommended path:
 
-1. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
+Phase 2 is now fully shipped.
 
 Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.

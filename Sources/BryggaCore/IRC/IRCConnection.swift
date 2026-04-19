@@ -23,6 +23,11 @@ public actor IRCConnection {
 	public nonisolated let realName: String
 	public nonisolated let saslAccount: String?
 	public nonisolated let saslPassword: String?
+	/// Absolute path to a PKCS#12 file carrying the client certificate +
+	/// private key used for TLS client auth (required by SASL EXTERNAL).
+	/// `nil` disables client-cert presentation and EXTERNAL.
+	public nonisolated let clientCertificatePath: String?
+	public nonisolated let clientCertificatePassphrase: String?
 
 	// MARK: - State
 
@@ -68,7 +73,9 @@ public actor IRCConnection {
 		username: String? = nil,
 		realName: String? = nil,
 		saslAccount: String? = nil,
-		saslPassword: String? = nil
+		saslPassword: String? = nil,
+		clientCertificatePath: String? = nil,
+		clientCertificatePassphrase: String? = nil
 	) {
 		self.host = host
 		self.port = port
@@ -78,6 +85,8 @@ public actor IRCConnection {
 		self.realName = realName ?? nickname
 		self.saslAccount = saslAccount
 		self.saslPassword = saslPassword
+		self.clientCertificatePath = clientCertificatePath
+		self.clientCertificatePassphrase = clientCertificatePassphrase
 
 		var msgContinuation: AsyncStream<IRCLineParserResult>.Continuation!
 		self.messages = AsyncStream { continuation in
@@ -121,7 +130,28 @@ public actor IRCConnection {
 
 		setState(.connecting)
 
-		let parameters: NWParameters = useTLS ? .tls : .tcp
+		let parameters: NWParameters
+		if useTLS {
+			let tlsOptions = NWProtocolTLS.Options()
+			if let certPath = clientCertificatePath, !certPath.isEmpty {
+				do {
+					let identity = try ClientIdentity.load(
+						path: certPath,
+						passphrase: clientCertificatePassphrase
+					)
+					sec_protocol_options_set_local_identity(
+						tlsOptions.securityProtocolOptions,
+						identity
+					)
+				} catch {
+					setState(.failed("client cert load failed: \(error)"))
+					throw error
+				}
+			}
+			parameters = NWParameters(tls: tlsOptions)
+		} else {
+			parameters = .tcp
+		}
 		let endpointHost = NWEndpoint.Host(host)
 		guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
 			setState(.failed("invalid port \(port)"))
@@ -267,6 +297,8 @@ public actor IRCConnection {
 	private var scramClient: SCRAMSHA256Client?
 
 	private var useSasl: Bool {
+		// EXTERNAL only needs a TLS client identity — no password required.
+		if let certPath = clientCertificatePath, !certPath.isEmpty { return true }
 		guard let account = saslAccount, !account.isEmpty,
 		      let password = saslPassword, !password.isEmpty else { return false }
 		return true
@@ -458,6 +490,13 @@ public actor IRCConnection {
 	private func handleAuthenticate(_ msg: IRCLineParserResult) {
 		guard let payload = msg.params.first else { return }
 		switch saslMechanism {
+		case "EXTERNAL":
+			// EXTERNAL: the client identity has already been presented in the
+			// TLS handshake. Reply to `+` with a single `+` (empty authzid)
+			// so the server uses the cert's subject.
+			guard payload == "+" else { return }
+			Task { [weak self] in try? await self?.send("AUTHENTICATE +") }
+
 		case "PLAIN":
 			// PLAIN: server → "+", we → base64("\0user\0pass").
 			guard payload == "+",
@@ -531,9 +570,13 @@ public actor IRCConnection {
 		}
 	}
 
-	/// Preferred mechanism given `saslMechanisms`: SCRAM-SHA-256 wins over
-	/// PLAIN; if the server didn't advertise any, fall back to PLAIN.
+	/// Preferred mechanism given `saslMechanisms`: EXTERNAL wins when a
+	/// client cert is configured and the server advertises it; then
+	/// SCRAM-SHA-256 over PLAIN. Falls back to PLAIN when the server
+	/// advertised no mechanism list.
 	private func preferredSaslMechanism() -> String {
+		let hasCert = (clientCertificatePath?.isEmpty == false)
+		if hasCert && saslMechanisms.contains("EXTERNAL") { return "EXTERNAL" }
 		if saslMechanisms.contains("SCRAM-SHA-256") { return "SCRAM-SHA-256" }
 		return "PLAIN"
 	}

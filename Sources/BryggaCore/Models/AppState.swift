@@ -114,7 +114,9 @@ public final class AppState {
 				ignoreList: config.ignoreList,
 				notifyList: config.notifyList,
 				performCommands: config.performCommands,
-				pinnedChannels: config.pinnedChannels
+				pinnedChannels: config.pinnedChannels,
+				clientCertificatePath: config.clientCertificatePath,
+				clientCertificatePassphrase: config.clientCertificatePassphrase
 			)
 			for nick in config.openQueries {
 				let ch = Channel(name: nick)
@@ -164,7 +166,9 @@ public final class AppState {
 				ignoreList: server.ignoreList,
 				notifyList: server.notifyList,
 				performCommands: server.performCommands,
-				pinnedChannels: server.pinnedChannels
+				pinnedChannels: server.pinnedChannels,
+				clientCertificatePath: server.clientCertificatePath,
+				clientCertificatePassphrase: server.clientCertificatePassphrase
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -236,7 +240,9 @@ public final class AppState {
 		ignoreList: [String] = [],
 		notifyList: [String] = [],
 		performCommands: [String] = [],
-		pinnedChannels: [String] = []
+		pinnedChannels: [String] = [],
+		clientCertificatePath: String? = nil,
+		clientCertificatePassphrase: String? = nil
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
@@ -251,13 +257,17 @@ public final class AppState {
 		server.notifyList = notifyList
 		server.performCommands = performCommands
 		server.pinnedChannels = pinnedChannels.map { $0.lowercased() }
+		server.clientCertificatePath = clientCertificatePath
+		server.clientCertificatePassphrase = clientCertificatePassphrase
 		let connection = IRCConnection(
 			host: host,
 			port: port,
 			useTLS: useTLS,
 			nickname: nickname,
 			saslAccount: saslAccount,
-			saslPassword: saslPassword
+			saslPassword: saslPassword,
+			clientCertificatePath: clientCertificatePath,
+			clientCertificatePassphrase: clientCertificatePassphrase
 		)
 		let session = IRCSession(server: server, connection: connection)
 		session.autoJoinChannels = autoJoinChannels

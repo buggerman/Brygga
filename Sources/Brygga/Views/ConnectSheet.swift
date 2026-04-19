@@ -19,6 +19,8 @@ struct ConnectSheet: View {
 	@State private var useTLS: Bool = true
 	@State private var saslAccount: String = ""
 	@State private var saslPassword: String = ""
+	@State private var certPath: String = ""
+	@State private var certPassphrase: String = ""
 
 	/// Picks the default nickname from preferences, falling back to the macOS
 	/// user short name when the pref is blank.
@@ -60,6 +62,21 @@ struct ConnectSheet: View {
 						.textContentType(.username)
 					SecureField("Password", text: $saslPassword)
 				}
+				Section {
+					HStack {
+						TextField("Certificate (.p12)", text: $certPath, prompt: Text("no client certificate"))
+							.truncationMode(.middle)
+						Button("Choose\u{2026}") { chooseCert() }
+					}
+					SecureField("Passphrase", text: $certPassphrase)
+						.disabled(certPath.isEmpty)
+				} header: {
+					Text("Client certificate (optional)")
+				} footer: {
+					Text("Enables SASL EXTERNAL. The certificate is presented during TLS and reused on every reconnect.")
+						.font(.caption)
+						.foregroundStyle(.secondary)
+				}
 			}
 			.formStyle(.grouped)
 			.padding(.horizontal, 8)
@@ -87,6 +104,9 @@ struct ConnectSheet: View {
 		let trimmedAccount = saslAccount.trimmingCharacters(in: .whitespaces)
 		let account = trimmedAccount.isEmpty ? nil : trimmedAccount
 		let password = saslPassword.isEmpty ? nil : saslPassword
+		let trimmedCertPath = certPath.trimmingCharacters(in: .whitespaces)
+		let effectiveCertPath = trimmedCertPath.isEmpty ? nil : trimmedCertPath
+		let effectiveCertPassphrase = (effectiveCertPath == nil || certPassphrase.isEmpty) ? nil : certPassphrase
 		appState.addServer(
 			name: name,
 			host: host.trimmingCharacters(in: .whitespaces),
@@ -94,8 +114,21 @@ struct ConnectSheet: View {
 			useTLS: useTLS,
 			nickname: nickname.trimmingCharacters(in: .whitespaces),
 			saslAccount: account,
-			saslPassword: password
+			saslPassword: password,
+			clientCertificatePath: effectiveCertPath,
+			clientCertificatePassphrase: effectiveCertPassphrase
 		)
 		dismiss()
+	}
+
+	private func chooseCert() {
+		let panel = NSOpenPanel()
+		panel.allowedContentTypes = [.init(filenameExtension: "p12")!, .init(filenameExtension: "pfx")!]
+		panel.allowsMultipleSelection = false
+		panel.canChooseDirectories = false
+		panel.canChooseFiles = true
+		if panel.runModal() == .OK, let url = panel.url {
+			certPath = url.path
+		}
 	}
 }

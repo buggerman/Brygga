@@ -17,6 +17,10 @@ public final class Server: Identifiable {
 	public var nickname: String
 	public var saslAccount: String?
 	public var saslPassword: String?
+	/// Path to a PKCS#12 client certificate used for TLS client auth
+	/// (enables SASL EXTERNAL). `nil` disables.
+	public var clientCertificatePath: String?
+	public var clientCertificatePassphrase: String?
 	public var channels: [Channel] = []
 	public var messages: [Message] = []
 	public var channelListing: [ChannelListing] = []
