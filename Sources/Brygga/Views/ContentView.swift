@@ -1067,6 +1067,7 @@ struct InputBar: View {
 					return .handled
 				}
 				.onChange(of: draft) { _, _ in
+					autoReplaceEmojiShortcode()
 					// Any external edit resets completion cycle.
 					if completionPrefix.isEmpty {
 						emitTypingForDraftChange()
@@ -1120,11 +1121,31 @@ struct InputBar: View {
 	// MARK: - Tab completion
 
 	private func handleTab() {
-		guard !suggestions.isEmpty else { return }
+		let (base, prefix) = splitLastWord(draft)
 
-		// Starting a new cycle: find the word-under-cursor prefix.
+		// Emoji branch: when the current word starts with `:`, Tab cycles
+		// through shortcode matches (showing `:code:` in the draft); the
+		// user then types/accepts to trigger the auto-replace into the
+		// glyph itself.
+		if prefix.hasPrefix(":") {
+			let emojiPrefix = String(prefix.dropFirst())
+			if completionPrefix.isEmpty || !completionPrefix.hasPrefix(":") {
+				let matches = EmojiShortcodes.matches(prefix: emojiPrefix)
+				guard !matches.isEmpty else { return }
+				completionBase = base
+				completionPrefix = prefix
+				completionMatches = matches.map { ":\($0):" }
+				completionIndex = 0
+			} else {
+				completionIndex = (completionIndex + 1) % completionMatches.count
+			}
+			draft = completionBase + completionMatches[completionIndex]
+			return
+		}
+
+		// Nick branch (existing behavior).
+		guard !suggestions.isEmpty else { return }
 		if completionPrefix.isEmpty {
-			let (base, prefix) = splitLastWord(draft)
 			let lowered = prefix.lowercased()
 			let matches = suggestions.filter { $0.lowercased().hasPrefix(lowered) }
 			guard !matches.isEmpty else { return }
@@ -1136,6 +1157,26 @@ struct InputBar: View {
 			completionIndex = (completionIndex + 1) % completionMatches.count
 		}
 		apply(match: completionMatches[completionIndex])
+	}
+
+	/// If the draft ends in `:shortcode:` for a known emoji, swap the whole
+	/// run for the glyph. Called from `onChange(of: draft)`.
+	private func autoReplaceEmojiShortcode() {
+		guard draft.hasSuffix(":"), draft.count >= 3 else { return }
+		// Find the matching opening `:` — there must be at least one character
+		// in between and no whitespace.
+		let trailing = draft.dropLast()
+		guard let openIdx = trailing.lastIndex(of: ":") else { return }
+		let shortcode = trailing[trailing.index(after: openIdx)...]
+		guard !shortcode.isEmpty,
+		      !shortcode.contains(" "),
+		      !shortcode.contains(":") else { return }
+		guard let emoji = EmojiShortcodes.emoji(for: String(shortcode)) else { return }
+		// Replace the `:shortcode:` run with the emoji character.
+		let replacementStart = openIdx
+		let replacementEnd = draft.endIndex
+		draft.replaceSubrange(replacementStart..<replacementEnd, with: emoji)
+		resetCompletion()
 	}
 
 	private func apply(match: String) {

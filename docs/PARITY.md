@@ -91,7 +91,7 @@ These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "mod
 
 ## Phase 3 — Polish
 
-1. Emoji autocomplete (`:smile:` → 😄).
+1. ~~Emoji autocomplete (`:smile:` → 😄).~~ Shipped — ~300 curated Slack/Discord-style shortcodes, auto-replace on `:word:` completion, and Tab cycles through `:pref` prefixes.
 2. Markdown-style input (`*bold*` → `^B`) as an optional toggle.
 3. Keyboard shortcuts — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel.
 4. Status bar — connection state, lag, server ping.
