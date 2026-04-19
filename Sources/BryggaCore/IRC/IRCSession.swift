@@ -284,6 +284,7 @@ public final class IRCSession {
 		case "PONG":    handlePong(message)
 		case "NOTICE":  handleNotice(message)
 		case "JOIN":    handleJoin(message)
+		case "MODE":    handleMode(message)
 		case "PART":    handlePart(message)
 		case "QUIT":    handleQuit(message)
 		case "NICK":    handleNick(message)
@@ -1147,6 +1148,79 @@ public final class IRCSession {
 			}
 			record(Message(sender: nick, content: "joined \(channelName)", kind: .join), in: channel)
 		}
+	}
+
+	/// Handles a channel MODE change. Applies `+o/+v/+h/+a/+q` prefix modes
+	/// so the user list re-renders with the matching `@`/`+`/`%`/`&`/`~`.
+	/// Channel-level modes without a user argument (e.g. `+n`, `+m`) and
+	/// user-modes on our own nick are currently recorded as a system line
+	/// but not parsed further.
+	private func handleMode(_ message: IRCLineParserResult) {
+		guard message.params.count >= 2 else { return }
+		let target = message.params[0]
+		let modeString = message.params[1]
+		let arguments = Array(message.params.dropFirst(2))
+		let setter = message.senderNickname ?? message.senderString ?? "server"
+
+		// User-mode changes on our own nick don't have channel context —
+		// just log them for visibility.
+		guard target.hasPrefix("#") || target.hasPrefix("&") else {
+			recordServer(Message(
+				sender: "**",
+				content: "\(setter) sets mode \(modeString) on \(target)",
+				kind: .mode
+			))
+			return
+		}
+
+		guard let channel = server.channels.first(where: { $0.name == target }) else { return }
+
+		// Modes that take a nickname argument and map to a user-prefix flag.
+		let prefixModes: Set<Character> = ["o", "v", "h", "a", "q"]
+		// Modes that consume an argument but don't map to a prefix (bans,
+		// channel keys, user limits, invex, excepts). We skip past their
+		// argument so the indexing stays aligned.
+		let argumentModes: Set<Character> = ["b", "e", "I", "k", "l", "f", "j"]
+
+		var argIndex = 0
+		var sign: Character = "+"
+		var summaryParts: [String] = []
+
+		for char in modeString {
+			if char == "+" || char == "-" {
+				sign = char
+				continue
+			}
+			if prefixModes.contains(char) {
+				guard argIndex < arguments.count else { break }
+				let nick = arguments[argIndex]
+				argIndex += 1
+				if let user = channel.users.first(where: { $0.nickname == nick }) {
+					if sign == "+" {
+						user.modes.insert(char)
+					} else {
+						user.modes.remove(char)
+					}
+				}
+				summaryParts.append("\(sign)\(char) \(nick)")
+			} else if argumentModes.contains(char) {
+				// Skip the argument; these don't affect the user list.
+				if argIndex < arguments.count { argIndex += 1 }
+				summaryParts.append("\(sign)\(char)")
+			} else {
+				summaryParts.append("\(sign)\(char)")
+			}
+		}
+
+		let summary = summaryParts.joined(separator: " ")
+		record(
+			Message(
+				sender: setter,
+				content: "sets mode: \(summary)",
+				kind: .mode
+			),
+			in: channel
+		)
 	}
 
 	private func handlePart(_ message: IRCLineParserResult) {

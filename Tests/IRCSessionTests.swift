@@ -100,6 +100,42 @@ final class IRCSessionTests: XCTestCase {
 		XCTAssertEqual(channel.messages.last?.kind, .action)
 	}
 
+	// MARK: - MODE
+
+	func testModeOpFlipsUserPrefix() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse(":alice!~a@h JOIN #test"))
+		XCTAssertEqual(session.server.channels[0].users.first?.prefix, "")
+
+		session.handle(parse(":chanserv!services@. MODE #test +o alice"))
+		XCTAssertEqual(session.server.channels[0].users.first?.prefix, "@")
+	}
+
+	func testModeDeopClearsUserPrefix() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse(":alice!~a@h JOIN #test"))
+		session.handle(parse(":chanserv!services@. MODE #test +o alice"))
+		session.handle(parse(":chanserv!services@. MODE #test -o alice"))
+
+		XCTAssertEqual(session.server.channels[0].users.first?.prefix, "")
+	}
+
+	func testModeMixedFlipsBothUsers() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse(":alice!~a@h JOIN #test"))
+		session.handle(parse(":bob!~b@h JOIN #test"))
+		session.handle(parse(":chanserv!services@. MODE #test +o-v alice bob"))
+
+		let users = session.server.channels[0].users
+		let alice = users.first(where: { $0.nickname == "alice" })!
+		let bob = users.first(where: { $0.nickname == "bob" })!
+		XCTAssertEqual(alice.prefix, "@")
+		XCTAssertEqual(bob.prefix, "")
+	}
+
 	// MARK: - TAGMSG +typing
 
 	func testTagmsgActiveAddsTypingUser() {
