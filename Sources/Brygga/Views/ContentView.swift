@@ -1329,6 +1329,29 @@ struct InputBar: View {
 			return
 		}
 
+		// @-mention branch: Slack / Discord / Matrix-style `@alice`. Cycles
+		// channel users whose nick starts with the text after `@`, leaving
+		// the `@` prefix on the final token so mentions read consistently
+		// across bridged Matrix rooms.
+		if prefix.hasPrefix("@") {
+			let mentionPrefix = String(prefix.dropFirst())
+			if completionPrefix.isEmpty || !completionPrefix.hasPrefix("@") {
+				let lowered = mentionPrefix.lowercased()
+				let matches = suggestions.filter { $0.lowercased().hasPrefix(lowered) }
+				guard !matches.isEmpty else { return }
+				completionBase = base
+				completionPrefix = prefix
+				completionMatches = matches
+					.sorted(by: { $0.lowercased() < $1.lowercased() })
+					.map { "@\($0)" }
+				completionIndex = 0
+			} else {
+				completionIndex = (completionIndex + 1) % completionMatches.count
+			}
+			draft = completionBase + completionMatches[completionIndex]
+			return
+		}
+
 		// Nick branch (existing behavior).
 		guard !suggestions.isEmpty else { return }
 		if completionPrefix.isEmpty {
