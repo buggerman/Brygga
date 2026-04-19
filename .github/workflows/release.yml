@@ -4,8 +4,14 @@ on:
   push:
     branches:
       - main        # every commit publishes a rolling "nightly" prerelease
+    paths-ignore:
+      # Docs-only pushes should not cut a new nightly DMG.
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.gitignore'
     tags:
-      - 'v*'        # explicit tag publishes a stable release
+      - 'v*'        # explicit tag publishes a stable release (paths-ignore does not apply to tag pushes)
 
 permissions:
   contents: write   # needed to create/replace GitHub Releases and tags
