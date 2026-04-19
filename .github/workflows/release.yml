@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     branches:
-      - main        # every commit publishes a rolling "latest" release
+      - main        # every commit publishes a rolling "nightly" prerelease
     tags:
       - 'v*'        # explicit tag publishes a stable release
 
@@ -33,10 +33,12 @@ jobs:
             TITLE="Brygga ${VERSION}"
             ROLLING=false
           else
-            # Rolling build on main — reuses the 'latest' tag.
-            TAG="latest"
-            VERSION="0.1.0-build.${{ github.run_number }}"
-            TITLE="Latest (build ${{ github.run_number }})"
+            # Rolling build on main — delete+recreate a stable 'nightly'
+            # tag so friends can bookmark `releases/tag/nightly`.
+            TAG="nightly"
+            SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-7)"
+            VERSION="0.1.0-nightly.${{ github.run_number }}+${SHORT_SHA}"
+            TITLE="Brygga nightly (build ${{ github.run_number }} — ${SHORT_SHA})"
             ROLLING=true
           fi
           {
@@ -80,8 +82,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Remove the old rolling release + its tag so the next step can
-          # recreate them at this commit. Ignore failures when nothing exists.
+          # Delete the previous nightly prerelease + its tag so the next
+          # step can recreate them at this commit. Also delete the legacy
+          # 'latest' tag from pre-split builds so we don't leave a ghost.
+          gh release delete nightly --yes --cleanup-tag || true
           gh release delete latest --yes --cleanup-tag || true
 
       - name: Publish GitHub Release
@@ -106,5 +110,12 @@ jobs:
                ```
 
             4. Requires **macOS 15 Sequoia or later, Apple Silicon only**.
+
+            ## Release channels
+
+            Brygga ships two tracks:
+
+            - **Stable** — tagged `v*` releases, cut manually. Pointed to by GitHub's *Latest release* badge.
+            - **Nightly** — [`releases/tag/nightly`](../../releases/tag/nightly). Rebuilt automatically on every push to `main`; the tag is deleted and recreated each time so the URL is always current. Prerelease-marked.
 
             Commit: `${{ github.sha }}`

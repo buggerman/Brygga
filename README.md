@@ -13,7 +13,12 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 
 ## Download
 
-The rolling **[latest release](https://github.com/buggerman/Brygga/releases/tag/latest)** is rebuilt automatically on every push to `main`. Grab the `.dmg`, drag **Brygga.app** to `/Applications`, then right-click → **Open** on first launch (the binary is ad-hoc signed, not Developer-ID notarized).
+Brygga ships on two tracks:
+
+- **Stable** — [latest release](https://github.com/buggerman/Brygga/releases/latest). Cut manually from a `v*` tag; changes infrequently. Use this unless you want the cutting edge.
+- **Nightly** — [`releases/tag/nightly`](https://github.com/buggerman/Brygga/releases/tag/nightly). Rebuilt on every push to `main`; the tag is deleted and recreated each time so the URL is always current. Marked prerelease. Expect rough edges between commits.
+
+Either way, grab the `.dmg`, drag **Brygga.app** to `/Applications`, then right-click → **Open** on first launch (the binary is ad-hoc signed, not Developer-ID notarized).
 
 If Gatekeeper refuses to open it even after right-click → Open (e.g. *"Apple could not verify Brygga is free of malware"*), strip the quarantine attribute once and retry:
 
