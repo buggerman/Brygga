@@ -1238,6 +1238,12 @@ public final class IRCSession {
 		if isOwnMessage(nick) {
 			channel.isJoined = false
 			channel.users.removeAll()
+			// Scrollback line so the user can see they left — otherwise
+			// /part / /leave silently flips state with no feedback.
+			let ownText = reason.isEmpty
+				? "you left \(channelName)"
+				: "you left \(channelName) (\(reason))"
+			record(Message(sender: nick, content: ownText, kind: .part), in: channel)
 			onChannelsChanged?()
 		} else {
 			channel.users.removeAll(where: { $0.nickname == nick })

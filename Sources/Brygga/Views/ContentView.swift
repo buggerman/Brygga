@@ -639,10 +639,28 @@ struct ChatView: View {
 			let name = rest.isEmpty ? (channel?.name ?? "") : rest
 			guard !name.isEmpty else { return }
 			Task { try? await session.join(name) }
-		case "PART":
-			let name = rest.isEmpty ? (channel?.name ?? "") : rest
-			guard !name.isEmpty else { return }
-			Task { try? await session.part(name) }
+		case "PART", "LEAVE":
+			// mIRC-style parsing: `/part`, `/part <reason>`, `/part #chan`,
+			// `/part #chan <reason>`. If the first token starts with `#` or
+			// `&` we treat it as the channel target; otherwise the whole
+			// argument is the reason and we use the current channel.
+			let trimmed = rest.trimmingCharacters(in: .whitespaces)
+			let targetName: String
+			let reason: String?
+			if trimmed.isEmpty {
+				targetName = channel?.name ?? ""
+				reason = nil
+			} else if trimmed.hasPrefix("#") || trimmed.hasPrefix("&") {
+				let comps = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+				targetName = String(comps[0])
+				let r = comps.count > 1 ? String(comps[1]).trimmingCharacters(in: .whitespaces) : ""
+				reason = r.isEmpty ? nil : r
+			} else {
+				targetName = channel?.name ?? ""
+				reason = trimmed
+			}
+			guard !targetName.isEmpty else { return }
+			Task { try? await session.part(targetName, reason: reason) }
 		case "NICK":
 			Task { try? await session.setNickname(rest) }
 		case "QUIT", "DISCONNECT":
