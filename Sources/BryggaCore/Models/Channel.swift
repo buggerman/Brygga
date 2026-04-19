@@ -30,6 +30,10 @@ public final class Channel: Identifiable {
 	/// until `Date.now > expiry`. Updated from incoming TAGMSG `+typing`
 	/// client tags; transient — not persisted.
 	public var typingUsers: [String: Date] = [:]
+	/// `true` once `ScrollbackStore` has been consulted for this channel
+	/// so we don't double-load when JOIN is received for a channel the
+	/// restore path already rehydrated. Transient.
+	public var scrollbackLoaded: Bool = false
 
 	public init(name: String) {
 		self.id = UUID().uuidString

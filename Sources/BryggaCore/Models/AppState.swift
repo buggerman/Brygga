@@ -178,6 +178,7 @@ public final class AppState {
 					)
 					await MainActor.run {
 						channel.messages.insert(contentsOf: msgs, at: 0)
+						channel.scrollbackLoaded = true
 					}
 				}
 			}

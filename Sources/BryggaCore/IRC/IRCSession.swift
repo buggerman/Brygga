@@ -272,6 +272,7 @@ public final class IRCSession {
 		let channel = Channel(name: target)
 		channel.isPinned = server.pinnedChannels.contains(target.lowercased())
 		server.channels.append(channel)
+		loadScrollbackIfNeeded(for: channel)
 		onChannelsChanged?()
 		return channel
 	}
@@ -323,6 +324,24 @@ public final class IRCSession {
 	}
 
 	// MARK: - Scrollback
+
+	/// One-shot lazy load for channels created outside `restoreFromStore`'s
+	/// pre-hydrate path — i.e. channels first seen via JOIN reply or the
+	/// creation branch of openQuery / incoming PRIVMSG / TAGMSG. Guarded
+	/// by `Channel.scrollbackLoaded` so repeated JOINs don't double-fill.
+	public func loadScrollbackIfNeeded(for channel: Channel) {
+		guard !channel.scrollbackLoaded else { return }
+		channel.scrollbackLoaded = true
+		let sid = server.id
+		let target = channel.name
+		Task { [weak channel] in
+			let msgs = await ScrollbackStore.shared.load(serverId: sid, target: target)
+			guard let channel, !msgs.isEmpty else { return }
+			await MainActor.run {
+				channel.messages.insert(contentsOf: msgs, at: 0)
+			}
+		}
+	}
 
 	/// Persist-through append for a channel message. UI and disk scrollback
 	/// stay in sync.
@@ -583,6 +602,7 @@ public final class IRCSession {
 				channel = Channel(name: queryName)
 				channel.isPinned = server.pinnedChannels.contains(queryName.lowercased())
 				server.channels.append(channel)
+				loadScrollbackIfNeeded(for: channel)
 				onChannelsChanged?()
 			}
 			channel.typingUsers.removeValue(forKey: sender)
@@ -1099,6 +1119,7 @@ public final class IRCSession {
 			channel = Channel(name: channelName)
 			channel.isPinned = server.pinnedChannels.contains(channelName.lowercased())
 			server.channels.append(channel)
+			loadScrollbackIfNeeded(for: channel)
 			onChannelsChanged?()
 		} else {
 			return
@@ -1153,6 +1174,11 @@ public final class IRCSession {
 				server.channels.append(channel)
 			}
 			channel.isJoined = true
+			// Always consult scrollback here — covers both newly-created
+			// channels and pre-created-but-not-rehydrated ones that the
+			// restore path missed (e.g. because the user typed `/join`
+			// before the rehydrate Task iterated the channel list).
+			loadScrollbackIfNeeded(for: channel)
 			onChannelsChanged?()
 			requestChathistoryIfNeeded(for: channel)
 		} else {
