@@ -404,6 +404,9 @@ public final class IRCSession {
 			}
 			notifyOnline = []
 			startNotifyPolling()
+			for line in server.performCommands {
+				Task { try? await connection.send(line) }
+			}
 		case 332:
 			handleTopicReply(message)
 		case 353:
@@ -535,6 +538,30 @@ public final class IRCSession {
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
 		}
+	}
+
+	// MARK: - Perform (post-welcome commands)
+
+	public func addPerform(_ line: String) {
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty else { return }
+		server.performCommands.append(trimmed)
+		onChannelsChanged?()
+	}
+
+	@discardableResult
+	public func removePerform(_ line: String) -> Bool {
+		let before = server.performCommands.count
+		server.performCommands.removeAll { $0 == line }
+		let removed = server.performCommands.count != before
+		if removed { onChannelsChanged?() }
+		return removed
+	}
+
+	public func clearPerform() {
+		guard !server.performCommands.isEmpty else { return }
+		server.performCommands = []
+		onChannelsChanged?()
 	}
 
 	// MARK: - Notify / buddy list

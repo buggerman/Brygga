@@ -102,7 +102,8 @@ public final class AppState {
 				saslAccount: config.saslAccount,
 				saslPassword: config.saslPassword,
 				ignoreList: config.ignoreList,
-				notifyList: config.notifyList
+				notifyList: config.notifyList,
+				performCommands: config.performCommands
 			)
 			for nick in config.openQueries {
 				server.channels.append(Channel(name: nick))
@@ -148,7 +149,8 @@ public final class AppState {
 				saslAccount: server.saslAccount,
 				saslPassword: server.saslPassword,
 				ignoreList: server.ignoreList,
-				notifyList: server.notifyList
+				notifyList: server.notifyList,
+				performCommands: server.performCommands
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -218,7 +220,8 @@ public final class AppState {
 		saslAccount: String? = nil,
 		saslPassword: String? = nil,
 		ignoreList: [String] = [],
-		notifyList: [String] = []
+		notifyList: [String] = [],
+		performCommands: [String] = []
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
@@ -231,6 +234,7 @@ public final class AppState {
 		)
 		server.ignoreList = ignoreList
 		server.notifyList = notifyList
+		server.performCommands = performCommands
 		let connection = IRCConnection(
 			host: host,
 			port: port,

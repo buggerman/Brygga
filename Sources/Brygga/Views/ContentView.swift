@@ -282,6 +282,38 @@ struct ChatView: View {
 		draft = ""
 	}
 
+	private func handlePerformCommand(_ rest: String, session: IRCSession) {
+		let arg = rest.trimmingCharacters(in: .whitespaces)
+		if arg.isEmpty {
+			let list = session.server.performCommands
+			if list.isEmpty {
+				session.recordServer(Message(sender: "*", content: "perform list is empty", kind: .server))
+			} else {
+				for (i, line) in list.enumerated() {
+					session.recordServer(Message(sender: "*", content: "[\(i + 1)] \(line)", kind: .server))
+				}
+			}
+			return
+		}
+		if arg == "-c" {
+			session.clearPerform()
+			session.recordServer(Message(sender: "*", content: "cleared perform list", kind: .server))
+			return
+		}
+		if arg.hasPrefix("-r ") {
+			let target = String(arg.dropFirst(3))
+			let removed = session.removePerform(target)
+			session.recordServer(Message(
+				sender: "*",
+				content: removed ? "removed from perform: \(target)" : "not in perform list: \(target)",
+				kind: .server
+			))
+			return
+		}
+		session.addPerform(arg)
+		session.recordServer(Message(sender: "*", content: "added to perform: \(arg)", kind: .server))
+	}
+
 	private func handleNotifyCommand(_ rest: String, session: IRCSession) {
 		let arg = rest.trimmingCharacters(in: .whitespaces)
 		if arg.isEmpty {
@@ -392,6 +424,8 @@ struct ChatView: View {
 			))
 		case "NOTIFY":
 			handleNotifyCommand(rest, session: session)
+		case "PERFORM":
+			handlePerformCommand(rest, session: session)
 		case "ME":
 			guard let channel = channel, !rest.isEmpty else { return }
 			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)
