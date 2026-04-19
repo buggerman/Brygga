@@ -335,7 +335,12 @@ public final class IRCSession {
 	}
 
 	private func logToDiskIfEnabled(_ message: Message, target: String) {
-		guard UserDefaults.standard.bool(forKey: PreferencesKeys.diskLoggingEnabled) else { return }
+		// Default to logging on when the preference has never been set so
+		// brand-new installs drop a paper trail into `~/Documents/Brygga Logs/`
+		// without the user having to hunt for a toggle. Explicit opt-out
+		// (set to `false` in Preferences → Logging) is honoured.
+		let enabled = UserDefaults.standard.object(forKey: PreferencesKeys.diskLoggingEnabled) as? Bool ?? true
+		guard enabled else { return }
 		let network = server.name
 		let line = Self.formatLogLine(message)
 		let ts = message.timestamp

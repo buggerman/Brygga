@@ -145,6 +145,18 @@ public final class AppState {
 				clientCertificatePath: config.clientCertificatePath,
 				clientCertificatePassphrase: config.clientCertificatePassphrase
 			)
+			// Pre-create Channel objects for auto-join channels so the async
+			// scrollback rehydrate below has somewhere to land. Without this,
+			// the channel doesn't exist until the server responds to our
+			// JOIN, by which point the rehydrate has already iterated
+			// `server.channels` and missed it — the user would see an empty
+			// buffer on every launch. The JOIN handler is idempotent
+			// (`if let existing = …`) so re-using these objects is safe.
+			for name in config.autoJoinChannels {
+				let ch = Channel(name: name)
+				ch.isPinned = server.pinnedChannels.contains(name.lowercased())
+				server.channels.append(ch)
+			}
 			for nick in config.openQueries {
 				let ch = Channel(name: nick)
 				ch.isPinned = server.pinnedChannels.contains(nick.lowercased())

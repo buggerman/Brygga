@@ -224,7 +224,7 @@ struct IgnorePane: View {
 // MARK: - Logging
 
 struct LoggingPane: View {
-	@AppStorage(PreferencesKeys.diskLoggingEnabled) private var diskLoggingEnabled = false
+	@AppStorage(PreferencesKeys.diskLoggingEnabled) private var diskLoggingEnabled = true
 
 	private var logFolder: URL {
 		let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
