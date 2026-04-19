@@ -51,6 +51,11 @@ public enum ServerStore {
 			autoJoinChannels = try c.decode([String].self, forKey: .autoJoinChannels)
 			openQueries = try c.decodeIfPresent([String].self, forKey: .openQueries) ?? []
 			saslAccount = try c.decodeIfPresent(String.self, forKey: .saslAccount)
+			// saslPassword / clientCertificatePassphrase are still read for
+			// one-time migration from pre-0.1.2 JSON that stored them in
+			// plaintext — but they're no longer encoded. AppState picks up
+			// whatever lands here, writes it to Keychain, and the next
+			// persist drops it from disk.
 			saslPassword = try c.decodeIfPresent(String.self, forKey: .saslPassword)
 			ignoreList = try c.decodeIfPresent([String].self, forKey: .ignoreList) ?? []
 			notifyList = try c.decodeIfPresent([String].self, forKey: .notifyList) ?? []
@@ -58,6 +63,29 @@ public enum ServerStore {
 			pinnedChannels = try c.decodeIfPresent([String].self, forKey: .pinnedChannels) ?? []
 			clientCertificatePath = try c.decodeIfPresent(String.self, forKey: .clientCertificatePath)
 			clientCertificatePassphrase = try c.decodeIfPresent(String.self, forKey: .clientCertificatePassphrase)
+		}
+
+		/// Custom encode deliberately skips `saslPassword` and
+		/// `clientCertificatePassphrase` — those live in Keychain now.
+		/// Everything else uses `encodeIfPresent` so optionals don't
+		/// clutter the JSON with explicit `null` entries.
+		public func encode(to encoder: Encoder) throws {
+			var c = encoder.container(keyedBy: CodingKeys.self)
+			try c.encodeIfPresent(id, forKey: .id)
+			try c.encode(name, forKey: .name)
+			try c.encode(host, forKey: .host)
+			try c.encode(port, forKey: .port)
+			try c.encode(useTLS, forKey: .useTLS)
+			try c.encode(nickname, forKey: .nickname)
+			try c.encode(autoJoinChannels, forKey: .autoJoinChannels)
+			try c.encode(openQueries, forKey: .openQueries)
+			try c.encodeIfPresent(saslAccount, forKey: .saslAccount)
+			try c.encode(ignoreList, forKey: .ignoreList)
+			try c.encode(notifyList, forKey: .notifyList)
+			try c.encode(performCommands, forKey: .performCommands)
+			try c.encode(pinnedChannels, forKey: .pinnedChannels)
+			try c.encodeIfPresent(clientCertificatePath, forKey: .clientCertificatePath)
+			// saslPassword and clientCertificatePassphrase: intentionally omitted.
 		}
 
 		public init(

@@ -126,13 +126,37 @@ public final class AppState {
 		let snapshot = ServerStore.load()
 		guard !snapshot.servers.isEmpty else { return }
 		isRestoring = true
-		defer { isRestoring = false }
+
+		// Tracks whether any ServerConfig arrived with a plaintext secret
+		// field from a pre-Keychain `servers.json`. If so, we force one
+		// `persist()` at the end of restore to scrub the legacy JSON even
+		// if nothing else changes during this launch.
+		var didMigrateSecrets = false
 
 		for config in snapshot.servers {
+			// Resolve secrets: Keychain wins; legacy JSON is a migration
+			// fallback that gets scrubbed on the next write.
+			let saslPwFromKeychain = config.id.flatMap { id in
+				KeychainStore.secret(for: id, field: .saslPassword)
+			}
+			let certPpFromKeychain = config.id.flatMap { id in
+				KeychainStore.secret(for: id, field: .certificatePassphrase)
+			}
+			let saslPassword = saslPwFromKeychain ?? config.saslPassword
+			let certPassphrase = certPpFromKeychain ?? config.clientCertificatePassphrase
+
+			if saslPwFromKeychain == nil, config.saslPassword?.isEmpty == false {
+				didMigrateSecrets = true
+			}
+			if certPpFromKeychain == nil, config.clientCertificatePassphrase?.isEmpty == false {
+				didMigrateSecrets = true
+			}
+
 			// Pass `id` through so the Server keeps the stable UUID stored
 			// in `servers.json`. Without this, every launch mints a new
 			// UUID, orphans the scrollback directory on disk, and the
-			// user sees an empty buffer.
+			// user sees an empty buffer. `addServer` writes the resolved
+			// secrets back to Keychain, which completes the migration.
 			let server = addServer(
 				id: config.id,
 				name: config.name,
@@ -142,13 +166,13 @@ public final class AppState {
 				nickname: config.nickname,
 				autoJoinChannels: config.autoJoinChannels,
 				saslAccount: config.saslAccount,
-				saslPassword: config.saslPassword,
+				saslPassword: saslPassword,
 				ignoreList: config.ignoreList,
 				notifyList: config.notifyList,
 				performCommands: config.performCommands,
 				pinnedChannels: config.pinnedChannels,
 				clientCertificatePath: config.clientCertificatePath,
-				clientCertificatePassphrase: config.clientCertificatePassphrase
+				clientCertificatePassphrase: certPassphrase
 			)
 			// Pre-create Channel objects for auto-join channels so the async
 			// scrollback rehydrate below has somewhere to land. Without this,
@@ -188,6 +212,15 @@ public final class AppState {
 				}
 			}
 		}
+
+		isRestoring = false
+		// Force-write the JSON once when we've pulled secrets out of
+		// legacy plaintext so the scrubbed snapshot (no saslPassword /
+		// clientCertificatePassphrase keys) lands on disk immediately
+		// instead of waiting for the user's next config change.
+		if didMigrateSecrets {
+			persist()
+		}
 	}
 
 	private func snapshot() -> ServerStore.Snapshot {
@@ -208,13 +241,17 @@ public final class AppState {
 				autoJoinChannels: joined,
 				openQueries: queries,
 				saslAccount: server.saslAccount,
-				saslPassword: server.saslPassword,
+				// Secrets stay out of servers.json. KeychainStore is the
+				// only place plaintext passwords and passphrases live.
+				// ServerConfig.encode(to:) also omits these keys, so this
+				// is belt-and-braces.
+				saslPassword: nil,
 				ignoreList: server.ignoreList,
 				notifyList: server.notifyList,
 				performCommands: server.performCommands,
 				pinnedChannels: server.pinnedChannels,
 				clientCertificatePath: server.clientCertificatePath,
-				clientCertificatePassphrase: server.clientCertificatePassphrase
+				clientCertificatePassphrase: nil
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -307,6 +344,12 @@ public final class AppState {
 		server.pinnedChannels = pinnedChannels.map { $0.lowercased() }
 		server.clientCertificatePath = clientCertificatePath
 		server.clientCertificatePassphrase = clientCertificatePassphrase
+		// Write-through secrets to Keychain on every addServer invocation
+		// (restore, Connect sheet, test fixtures). Empty / nil values
+		// become deletions, so clearing a password in the sheet removes
+		// it from Keychain on the next persist cycle.
+		KeychainStore.setSecret(saslPassword ?? "", for: server.id, field: .saslPassword)
+		KeychainStore.setSecret(clientCertificatePassphrase ?? "", for: server.id, field: .certificatePassphrase)
 		let connection = IRCConnection(
 			host: host,
 			port: port,
@@ -430,6 +473,9 @@ public final class AppState {
 
 	/// Disconnects and removes a server.
 	public func removeServer(id: String) {
+		// Drop any Keychain entries before tearing the session down so
+		// orphaned secrets don't linger.
+		KeychainStore.deleteAllSecrets(for: id)
 		if let session = sessions[id] {
 			session.stop()
 			Task {
