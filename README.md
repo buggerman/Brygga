@@ -11,6 +11,10 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 - Xcode 26 or later (for building from source)
 - Swift 6.0+
 
+## Download
+
+The rolling **[latest release](https://github.com/buggerman/Brygga/releases/tag/latest)** is rebuilt automatically on every push to `main`. Grab the `.dmg`, drag **Brygga.app** to `/Applications`, then right-click → **Open** on first launch (the binary is ad-hoc signed, not Developer-ID notarized).
+
 ## Building
 
 ```sh
