@@ -36,12 +36,20 @@ struct PreferencesView: View {
 struct GeneralPane: View {
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
 	@AppStorage(PreferencesKeys.autoJoinOnInvite) private var autoJoinOnInvite = false
+	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 
 	var body: some View {
 		Form {
 			Section("Channels") {
 				Toggle("Show joins and parts in channels", isOn: $showJoinsParts)
 				Toggle("Auto-join channels when invited", isOn: $autoJoinOnInvite)
+			}
+			Section {
+				Toggle("Fetch link previews for URLs in messages", isOn: $linkPreviewsEnabled)
+			} footer: {
+				Text("Fetches the page title, description, and thumbnail for URLs shared in chat. Each fetch discloses your IP to the remote host.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
 			}
 		}
 		.formStyle(.grouped)

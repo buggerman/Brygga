@@ -24,4 +24,9 @@ public enum PreferencesKeys {
 	/// "system" | "12h" | "24h"
 	public static let timestampFormat = "brygga.timestampFormat"
 	public static let nickColorsEnabled = "brygga.nickColorsEnabled"
+
+	/// Fetch titles / images for URLs in messages. Defaults to true — see
+	/// `GeneralPane` for the opt-out toggle. Reads are capped at 2 MB and
+	/// timed out at 10 s; only http and https schemes are followed.
+	public static let linkPreviewsEnabled = "brygga.linkPreviewsEnabled"
 }

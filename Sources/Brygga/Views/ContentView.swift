@@ -785,6 +785,7 @@ struct MessageRow: View {
 	let message: Message
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
 	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
+	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 
 	private func senderColor(_ nick: String) -> Color {
 		nickColorsEnabled ? NickColor.color(for: nick) : Color.accentColor
@@ -817,21 +818,29 @@ struct MessageRow: View {
 	}
 
 	var body: some View {
-		rowBody
-			.padding(.vertical, message.isHighlight ? 2 : 0)
-			.padding(.horizontal, message.isHighlight ? 4 : 0)
-			.background(
-				message.isHighlight
-					? Color.accentColor.opacity(0.15)
-					: Color.clear
-			)
-			.overlay(alignment: .leading) {
-				if message.isHighlight {
-					Rectangle()
-						.fill(Color.accentColor)
-						.frame(width: 2)
-				}
+		VStack(alignment: .leading, spacing: 2) {
+			rowBody
+			if linkPreviewsEnabled, let url = firstPreviewableURL(in: message.content) {
+				LinkPreviewView(url: url)
+					.padding(.leading, 68)
+					.padding(.trailing, 16)
+					.padding(.top, 2)
 			}
+		}
+		.padding(.vertical, message.isHighlight ? 2 : 0)
+		.padding(.horizontal, message.isHighlight ? 4 : 0)
+		.background(
+			message.isHighlight
+				? Color.accentColor.opacity(0.15)
+				: Color.clear
+		)
+		.overlay(alignment: .leading) {
+			if message.isHighlight {
+				Rectangle()
+					.fill(Color.accentColor)
+					.frame(width: 2)
+			}
+		}
 	}
 
 	@ViewBuilder
@@ -875,6 +884,133 @@ struct MessageRow: View {
 					.foregroundStyle(.secondary)
 					.frame(maxWidth: .infinity, alignment: .leading)
 			}
+		}
+	}
+}
+
+// MARK: - Link preview
+
+/// Returns the first HTTP/HTTPS URL found in `text`, or `nil`.
+@MainActor
+private let _linkDetector: NSDataDetector? = try? NSDataDetector(
+	types: NSTextCheckingResult.CheckingType.link.rawValue
+)
+
+@MainActor
+private func firstPreviewableURL(in text: String) -> URL? {
+	guard let detector = _linkDetector, !text.isEmpty else { return nil }
+	let range = NSRange(text.startIndex..., in: text)
+	var found: URL?
+	detector.enumerateMatches(in: text, options: [], range: range) { match, _, stop in
+		guard let url = match?.url, let scheme = url.scheme?.lowercased() else { return }
+		if scheme == "http" || scheme == "https" {
+			found = url
+			stop.pointee = true
+		}
+	}
+	return found
+}
+
+/// Inline preview for a single URL. Pulls data from
+/// `AppState.linkPreviews`, kicks off a fetch on appear if nothing is
+/// cached, and collapses to nothing on failure.
+@MainActor
+struct LinkPreviewView: View {
+	let url: URL
+	@Environment(AppState.self) private var appState
+
+	var body: some View {
+		let preview = appState.linkPreviews.preview(for: url)
+		content(for: preview)
+			.onAppear { appState.linkPreviews.fetchIfNeeded(url) }
+	}
+
+	@ViewBuilder
+	private func content(for preview: LinkPreview?) -> some View {
+		switch preview?.status {
+		case .loaded:
+			loadedBody(preview!)
+		case .loading, .none:
+			HStack(spacing: 6) {
+				ProgressView().controlSize(.mini)
+				Text(url.host ?? url.absoluteString)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+			}
+			.padding(.vertical, 2)
+		case .failed:
+			EmptyView()
+		}
+	}
+
+	@ViewBuilder
+	private func loadedBody(_ preview: LinkPreview) -> some View {
+		if preview.isDirectImage {
+			Link(destination: url) {
+				AsyncImage(url: url) { phase in
+					switch phase {
+					case .success(let image):
+						image
+							.resizable()
+							.scaledToFit()
+							.frame(maxWidth: 400, maxHeight: 260, alignment: .leading)
+							.clipShape(RoundedRectangle(cornerRadius: 6))
+					case .failure:
+						EmptyView()
+					default:
+						ProgressView().controlSize(.mini)
+					}
+				}
+			}
+			.buttonStyle(.plain)
+		} else {
+			Link(destination: url) {
+				HStack(alignment: .top, spacing: 10) {
+					if let imageURL = preview.imageURL {
+						AsyncImage(url: imageURL) { phase in
+							switch phase {
+							case .success(let image):
+								image
+									.resizable()
+									.scaledToFill()
+									.frame(width: 60, height: 60)
+									.clipShape(RoundedRectangle(cornerRadius: 4))
+							default:
+								RoundedRectangle(cornerRadius: 4)
+									.fill(.quaternary)
+									.frame(width: 60, height: 60)
+							}
+						}
+					}
+					VStack(alignment: .leading, spacing: 2) {
+						Text(preview.siteName ?? url.host ?? url.absoluteString)
+							.font(.caption)
+							.foregroundStyle(.secondary)
+							.lineLimit(1)
+						if let title = preview.title, !title.isEmpty {
+							Text(title)
+								.font(.system(.body, weight: .medium))
+								.foregroundStyle(.primary)
+								.lineLimit(2)
+						}
+						if let summary = preview.summary, !summary.isEmpty {
+							Text(summary)
+								.font(.caption)
+								.foregroundStyle(.secondary)
+								.lineLimit(3)
+						}
+					}
+					Spacer(minLength: 0)
+				}
+				.padding(8)
+				.background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.4)))
+				.overlay(
+					RoundedRectangle(cornerRadius: 6)
+						.strokeBorder(.quaternary, lineWidth: 1)
+				)
+			}
+			.buttonStyle(.plain)
 		}
 	}
 }

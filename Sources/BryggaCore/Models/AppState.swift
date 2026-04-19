@@ -35,6 +35,12 @@ public final class AppState {
 	/// (`Cmd+Shift+F`).
 	public var showingGlobalFind: Bool = false
 
+	/// Shared cache + fetcher for inline link previews. Views call
+	/// `linkPreviews.fetchIfNeeded(url)` on appear and read
+	/// `linkPreviews.preview(for: url)` to render. Off-by-default fetching
+	/// is gated at the call site via `PreferencesKeys.linkPreviewsEnabled`.
+	public let linkPreviews = LinkPreviewStore()
+
 	public init() {
 		restoreFromStore()
 		requestNotificationPermission()
