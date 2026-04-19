@@ -41,7 +41,7 @@ Brygga already covers everything a mIRC daily-driver expects, minus DCC and the 
 - SASL **EXTERNAL** (TLS client certificate), **SCRAM-SHA-256** (RFC 7677), or **PLAIN** — auto-selected based on what the server advertises
 - IRCv3 caps: `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag` / `account-notify`, `away-notify`, `invite-notify`, `batch`, `chathistory` / `draft/chathistory`, `message-tags`
 - Slash commands: `/join`, `/part`, `/nick`, `/me`, `/msg`, `/query`, `/topic`, `/whois`, `/away`, `/invite`, `/ignore`, `/notify`, `/list`, `/perform`, plus raw fallthrough
-- Two-column `NavigationSplitView` with auto-hiding user-list inspector, detachable channel windows (`Cmd+Shift+D`), pinned favorites (`Cmd+1…9`), in-buffer find (`Cmd+F`), cross-channel find (`Cmd+Shift+F`), tab nick completion, emoji autocomplete (`:smile:` → 😄)
+- Two-column `NavigationSplitView` with auto-hiding user-list inspector, detachable channel windows (`Cmd+Shift+D`), pinned favorites (`Cmd+1…9`), quick switcher (`Cmd+K`), quick join (`Cmd+J`), prev/next channel (`Cmd+[` / `Cmd+]`), in-buffer find (`Cmd+F`), cross-channel find (`Cmd+Shift+F`), tab nick completion, emoji autocomplete (`:smile:` → 😄)
 - IRCv3 typing indicator (`+typing` TAGMSG), inline OG / image link previews, mIRC control-code rendering, markdown-style input (`*bold*` / `_italic_` / `~strike~`), stable per-nick colors, highlight notifications with Dock badge, per-channel line marker
 - Preferences: show-joins/parts, auto-join-on-invite, link-previews, identity defaults, timestamp format, colorize nicknames, highlight keywords, ignore list, disk logging, saved servers
 - Persistence: servers + channels + preferences in `~/Library/Application Support/Brygga`, scrollback as JSONL, opt-in plain-text logs under `~/Documents/Brygga Logs`
@@ -52,9 +52,8 @@ Full list and what's still on the backlog lives in [docs/PARITY.md](docs/PARITY.
 
 The remaining polish items, in the order we'd tackle them next — directional, not a commitment:
 
-1. Keyboard shortcuts — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel
-2. Status bar — connection state, lag, server ping
-3. Liquid Glass tuning on chat surface, sidebar, and inspector
+1. Status bar — connection state, lag, server ping
+2. Liquid Glass tuning on chat surface, sidebar, and inspector
 
 ### Explicitly out of scope
 

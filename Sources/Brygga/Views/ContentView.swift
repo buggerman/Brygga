@@ -40,6 +40,14 @@ struct ContentView: View {
 			GlobalFindSheet()
 				.environment(appState)
 		}
+		.sheet(isPresented: $appState.showingQuickSwitcher) {
+			QuickSwitcherSheet()
+				.environment(appState)
+		}
+		.sheet(isPresented: $appState.showingQuickJoin) {
+			QuickJoinSheet()
+				.environment(appState)
+		}
 	}
 
 	private var shouldShowUserList: Bool {
@@ -1385,6 +1393,184 @@ private struct GlobalFindMatchRow: View {
 		let prefix = start > content.startIndex ? "\u{2026}" : ""
 		let suffix = end < content.endIndex ? "\u{2026}" : ""
 		return prefix + content[start..<end] + suffix
+	}
+}
+
+// MARK: - Quick switcher (Cmd+K)
+
+private struct QuickSwitcherItem: Identifiable {
+	let id: String
+	let serverName: String
+	let channelName: String
+	let isPrivateMessage: Bool
+}
+
+@MainActor
+struct QuickSwitcherSheet: View {
+	@Environment(AppState.self) private var appState
+	@Environment(\.dismiss) private var dismiss
+	@State private var query: String = ""
+	@State private var selectedID: String?
+	@FocusState private var queryFocused: Bool
+
+	private var items: [QuickSwitcherItem] {
+		var out: [QuickSwitcherItem] = []
+		for server in appState.servers {
+			for channel in server.channels {
+				out.append(QuickSwitcherItem(
+					id: channel.id,
+					serverName: server.name,
+					channelName: channel.name,
+					isPrivateMessage: channel.isPrivateMessage
+				))
+			}
+		}
+		let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+		guard !needle.isEmpty else { return out }
+		return out.filter {
+			$0.channelName.lowercased().contains(needle) ||
+			$0.serverName.lowercased().contains(needle)
+		}
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			HStack {
+				Text("Switch Channel")
+					.font(.headline)
+				Spacer()
+				Button("Done") { dismiss() }
+					.keyboardShortcut(.cancelAction)
+			}
+			.padding(.horizontal, 20)
+			.padding(.top, 20)
+			.padding(.bottom, 10)
+
+			HStack(spacing: 8) {
+				Image(systemName: "magnifyingglass")
+					.foregroundStyle(.secondary)
+				TextField("Channel or server\u{2026}", text: $query)
+					.textFieldStyle(.plain)
+					.focused($queryFocused)
+					.onSubmit { pickCurrent() }
+			}
+			.padding(10)
+			.background(RoundedRectangle(cornerRadius: 6).fill(.thinMaterial))
+			.padding(.horizontal, 20)
+			.padding(.bottom, 8)
+
+			Divider()
+
+			List(items, selection: $selectedID) { item in
+				HStack(spacing: 8) {
+					Image(systemName: item.isPrivateMessage ? "person.circle" : "number")
+						.foregroundStyle(.secondary)
+					Text(item.channelName)
+					Spacer()
+					Text(item.serverName)
+						.font(.caption)
+						.foregroundStyle(.secondary)
+				}
+				.contentShape(Rectangle())
+				.tag(Optional(item.id))
+				.onTapGesture {
+					appState.selection = item.id
+					dismiss()
+				}
+			}
+			.listStyle(.plain)
+		}
+		.frame(minWidth: 480, minHeight: 360)
+		.onAppear {
+			queryFocused = true
+			selectedID = items.first?.id
+		}
+		.onChange(of: query) { _, _ in
+			selectedID = items.first?.id
+		}
+	}
+
+	private func pickCurrent() {
+		let id = selectedID ?? items.first?.id
+		guard let id else { return }
+		appState.selection = id
+		dismiss()
+	}
+}
+
+// MARK: - Quick join (Cmd+J)
+
+@MainActor
+struct QuickJoinSheet: View {
+	@Environment(AppState.self) private var appState
+	@Environment(\.dismiss) private var dismiss
+	@State private var channel: String = ""
+	@State private var serverID: String = ""
+	@FocusState private var channelFocused: Bool
+
+	private var eligibleServers: [Server] {
+		appState.servers.filter { $0.isActive }
+	}
+
+	private var canSubmit: Bool {
+		let trimmed = channel.trimmingCharacters(in: .whitespaces)
+		return !trimmed.isEmpty && !serverID.isEmpty
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			HStack {
+				Text("Join Channel")
+					.font(.headline)
+				Spacer()
+			}
+			.padding(.horizontal, 20)
+			.padding(.top, 20)
+			.padding(.bottom, 10)
+
+			Form {
+				if eligibleServers.count > 1 {
+					Picker("Server", selection: $serverID) {
+						ForEach(eligibleServers) { server in
+							Text(server.name).tag(server.id)
+						}
+					}
+				}
+				TextField("Channel", text: $channel, prompt: Text("#channel"))
+					.focused($channelFocused)
+					.onSubmit { submit() }
+			}
+			.formStyle(.grouped)
+			.padding(.horizontal, 8)
+
+			HStack {
+				Spacer()
+				Button("Cancel", role: .cancel) { dismiss() }
+					.keyboardShortcut(.cancelAction)
+				Button("Join") { submit() }
+					.keyboardShortcut(.defaultAction)
+					.disabled(!canSubmit)
+			}
+			.padding(20)
+		}
+		.frame(width: 420)
+		.onAppear {
+			channelFocused = true
+			if serverID.isEmpty {
+				serverID = appState.selectedServer?.id
+					?? eligibleServers.first?.id
+					?? ""
+			}
+		}
+	}
+
+	private func submit() {
+		let trimmed = channel.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty,
+		      let session = appState.sessions[serverID] else { return }
+		let name = trimmed.hasPrefix("#") || trimmed.hasPrefix("&") ? trimmed : "#\(trimmed)"
+		Task { try? await session.join(name) }
+		dismiss()
 	}
 }
 

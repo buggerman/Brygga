@@ -51,10 +51,17 @@ struct BryggaApp: App {
 				Button("Disconnect") { }
 			}
 			CommandMenu("Channel") {
-				Button("Join Channel\u{2026}") { }
+				Button("Join Channel\u{2026}") { appState.showingQuickJoin = true }
 					.keyboardShortcut("j", modifiers: [.command])
 				Button("Leave Channel") { }
 					.keyboardShortcut("w", modifiers: [.command])
+				Divider()
+				Button("Switch Channel\u{2026}") { appState.showingQuickSwitcher = true }
+					.keyboardShortcut("k", modifiers: [.command])
+				Button("Previous Channel") { appState.selectAdjacentChannel(direction: -1) }
+					.keyboardShortcut("[", modifiers: [.command])
+				Button("Next Channel") { appState.selectAdjacentChannel(direction: 1) }
+					.keyboardShortcut("]", modifiers: [.command])
 			}
 			CommandMenu("Favorites") {
 				ForEach(0..<9, id: \.self) { index in

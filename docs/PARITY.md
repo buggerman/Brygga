@@ -38,6 +38,9 @@ Everything a mIRC daily-driver expects, minus DCC and mIRC scripting.
 - Two-column `NavigationSplitView` with auto-hiding user-list inspector (hides for PMs and the server console)
 - **Detachable tabs** — `Cmd+Shift+D` pops the selected channel into its own `WindowGroup` window, sharing `AppState`
 - **Favorites / pinned channels** — right-click → *Pin to Favorites* puts channels in a top sidebar section; `Cmd+1…9` jumps to the first nine pinned channels; persisted per server
+- **Quick switcher** — `Cmd+K` opens a filterable list of every channel/PM across servers; Enter jumps, Escape cancels
+- **Quick join** — `Cmd+J` opens a small sheet (server picker when multiple are connected) that sends JOIN
+- **Previous / next channel** — `Cmd+[` / `Cmd+]` cycle through the ordered sidebar list, wrapping at the ends
 - **Find in buffer** — `Cmd+F` filters the current channel with match count
 - **Find across all channels** — `Cmd+Shift+F` opens a modal sheet searching every server/channel/query (content + senders), capped at 300 most-recent hits, click to navigate
 - Sidebar context menu on server rows — Connect / Disconnect / Remove Server
@@ -96,9 +99,8 @@ Inline-editing the Servers list (host / port / SASL / perform) is the one thing 
 
 Polish items still on the list, in the order we'd do them next:
 
-1. **Keyboard shortcuts** — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel.
-2. **Status bar** — connection state, lag, server ping.
-3. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
+1. **Status bar** — connection state, lag, server ping.
+2. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
 
 ## Out of scope (deliberate)
 

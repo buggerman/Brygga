@@ -35,6 +35,12 @@ public final class AppState {
 	/// (`Cmd+Shift+F`).
 	public var showingGlobalFind: Bool = false
 
+	/// Coordination flag for the `Cmd+K` quick-switcher sheet.
+	public var showingQuickSwitcher: Bool = false
+
+	/// Coordination flag for the `Cmd+J` quick-join sheet.
+	public var showingQuickJoin: Bool = false
+
 	/// Shared cache + fetcher for inline link previews. Views call
 	/// `linkPreviews.fetchIfNeeded(url)` on appear and read
 	/// `linkPreviews.preview(for: url)` to render. Off-by-default fetching
@@ -49,6 +55,10 @@ public final class AppState {
 	// MARK: - Notifications
 
 	private func requestNotificationPermission() {
+		// UNUserNotificationCenter requires a real `.app` bundle — in
+		// `swift test` the "main bundle" is the xctest runner, and touching
+		// the center throws an NSInternalInconsistencyException.
+		guard Bundle.main.bundleURL.pathExtension == "app" else { return }
 		UNUserNotificationCenter.current().requestAuthorization(
 			options: [.alert, .sound, .badge]
 		) { _, _ in }
@@ -349,6 +359,35 @@ public final class AppState {
 		servers.flatMap { server in
 			server.channels.filter(\.isPinned)
 		}
+	}
+
+	/// Flat, in-sidebar-order list of selectable items: each server row
+	/// followed by its channels. Used by `selectAdjacentChannel(direction:)`
+	/// to drive the `Cmd+[` / `Cmd+]` previous / next navigation.
+	public var selectableIDs: [String] {
+		var ids: [String] = []
+		for server in servers {
+			ids.append(server.id)
+			for channel in server.channels {
+				ids.append(channel.id)
+			}
+		}
+		return ids
+	}
+
+	/// Moves the sidebar selection up (direction `-1`) or down (`+1`) one
+	/// row, wrapping at the ends. From an unselected state, `+1` jumps to
+	/// the first item and `-1` jumps to the last. No-op on an empty list.
+	public func selectAdjacentChannel(direction: Int) {
+		let ids = selectableIDs
+		guard !ids.isEmpty else { return }
+		guard let current = selection,
+		      let currentIndex = ids.firstIndex(of: current) else {
+			selection = direction >= 0 ? ids.first : ids.last
+			return
+		}
+		let nextIndex = ((currentIndex + direction) % ids.count + ids.count) % ids.count
+		selection = ids[nextIndex]
 	}
 
 	/// Disconnects and removes a server.
