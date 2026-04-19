@@ -117,6 +117,7 @@ public actor IRCConnection {
 		connection?.cancel()
 		connection = nil
 		receiveBuffer.removeAll()
+		resetRateBucket()
 
 		setState(.connecting)
 
@@ -154,12 +155,16 @@ public actor IRCConnection {
 	}
 
 	/// Send a raw IRC protocol line. The trailing `\r\n` is appended automatically.
-	public func send(_ line: String) async throws {
+	public func send(_ line: String, bypassRateLimit: Bool = false) async throws {
 		guard let conn = connection else {
 			throw ConnectionError.notConnected
 		}
 
 		let payload = Data((line + "\r\n").utf8)
+
+		if !bypassRateLimit {
+			await acquireTokens(payload.count)
+		}
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
 			conn.send(content: payload, completion: .contentProcessed { error in
@@ -170,6 +175,40 @@ public actor IRCConnection {
 				}
 			})
 		}
+	}
+
+	// MARK: - Outbound flood protection (token bucket)
+
+	/// Max outbound bytes allowed in a burst.
+	private static let rateMaxTokens: Double = 1200
+	/// Steady-state refill rate (bytes / second).
+	private static let rateRefillPerSec: Double = 300
+
+	private var rateTokens: Double = rateMaxTokens
+	private var rateLastRefill: Date = Date()
+
+	private func acquireTokens(_ count: Int) async {
+		let need = Double(count)
+		refillTokens()
+		if rateTokens < need {
+			let deficit = need - rateTokens
+			let waitSec = max(deficit / Self.rateRefillPerSec, 0)
+			try? await Task.sleep(nanoseconds: UInt64(waitSec * 1_000_000_000))
+			refillTokens()
+		}
+		rateTokens = max(0, rateTokens - need)
+	}
+
+	private func refillTokens() {
+		let now = Date()
+		let elapsed = now.timeIntervalSince(rateLastRefill)
+		rateTokens = min(Self.rateMaxTokens, rateTokens + elapsed * Self.rateRefillPerSec)
+		rateLastRefill = now
+	}
+
+	private func resetRateBucket() {
+		rateTokens = Self.rateMaxTokens
+		rateLastRefill = Date()
 	}
 
 	/// Sends QUIT (best-effort) and tears down the connection.
@@ -310,11 +349,13 @@ public actor IRCConnection {
 			guard !text.isEmpty else { continue }
 
 			// Built-in PING handler so the connection stays alive even if the
-			// consumer hasn't wired its own responder yet.
+			// consumer hasn't wired its own responder yet. PONG bypasses the
+			// outbound rate limiter — being slow to reply risks a server-side
+			// timeout disconnect.
 			if text.hasPrefix("PING ") {
 				let reply = "PONG " + text.dropFirst(5)
 				Task { [weak self] in
-					try? await self?.send(reply)
+					try? await self?.send(reply, bypassRateLimit: true)
 				}
 			}
 
