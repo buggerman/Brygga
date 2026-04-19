@@ -407,25 +407,64 @@ struct ServerMessageList: View {
 	}
 }
 
+@MainActor
 struct TopicBar: View {
 	let channel: Channel
+	@Environment(AppState.self) private var appState
+	@State private var isEditing = false
+	@State private var draft = ""
+	@FocusState private var focused: Bool
 
 	var body: some View {
-		HStack {
+		HStack(spacing: 8) {
 			Text(channel.name)
 				.font(.headline)
-			if !channel.topic.isEmpty {
-				Text("—")
-					.foregroundStyle(.secondary)
-				Text(channel.topic)
-					.foregroundStyle(.secondary)
-					.lineLimit(1)
+			Text("—")
+				.foregroundStyle(.secondary)
+
+			if isEditing {
+				TextField("Topic", text: $draft)
+					.textFieldStyle(.roundedBorder)
+					.focused($focused)
+					.onSubmit { submit() }
+					.onExitCommand { cancel() }
+				Button("Cancel") { cancel() }
+					.buttonStyle(.borderless)
+				Button("Set") { submit() }
+					.buttonStyle(.borderedProminent)
+			} else {
+				Button {
+					draft = channel.topic
+					isEditing = true
+					focused = true
+				} label: {
+					Text(channel.topic.isEmpty ? "(no topic — click to set)" : channel.topic)
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+				}
+				.buttonStyle(.plain)
+				Spacer()
 			}
-			Spacer()
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)
 		.background(.regularMaterial)
+	}
+
+	private func submit() {
+		guard let session = appState.selectedSession else {
+			cancel()
+			return
+		}
+		let trimmed = draft.trimmingCharacters(in: .whitespaces)
+		Task { try? await session.connection.send("TOPIC \(channel.name) :\(trimmed)") }
+		isEditing = false
+		draft = ""
+	}
+
+	private func cancel() {
+		isEditing = false
+		draft = ""
 	}
 }
 
