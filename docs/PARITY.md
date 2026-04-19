@@ -53,6 +53,7 @@ Everything a mIRC daily-driver expects, minus DCC and mIRC scripting.
 - **Inline link previews** — `LinkPreviewStore` fetches `og:title` / `og:description` / `og:image`, Twitter card meta, and raw `image/*` thumbnails (capped at 2 MB / 10 s, http + https only); default on, privacy-noted in Preferences
 - **Typing indicator** — IRCv3 `+typing` TAGMSG, throttled (active every 3 s, done on submit / empty draft), row above the InputBar auto-expires via `TimelineView`
 - **Emoji autocomplete** — ~300 curated Slack/Discord-style shortcodes; `:word:` auto-replaces to the glyph, Tab cycles through `:pref` matches
+- **Markdown-style input** — `*bold*` / `_italic_` / `~strike~` rewritten to mIRC control codes on send; toggle in Preferences → General (default on)
 - Nick-mention highlight with accent gutter + Dock badge + macOS notifications
 - Custom highlight keywords (configurable in Preferences)
 - Line marker — horizontal divider showing where you last read a channel when returning
@@ -95,10 +96,9 @@ Inline-editing the Servers list (host / port / SASL / perform) is the one thing 
 
 Polish items still on the list, in the order we'd do them next:
 
-1. **Markdown-style input** (`*bold*` → `^B`) as an optional toggle.
-2. **Keyboard shortcuts** — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel.
-3. **Status bar** — connection state, lag, server ping.
-4. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
+1. **Keyboard shortcuts** — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel.
+2. **Status bar** — connection state, lag, server ping.
+3. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
 
 ## Out of scope (deliberate)
 

@@ -355,14 +355,16 @@ struct ChatView: View {
 		if trimmed.hasPrefix("/") {
 			handleSlash(trimmed, session: session, channel: channel, sender: sender)
 		} else {
+			let markdownOn = UserDefaults.standard.object(forKey: PreferencesKeys.markdownInputEnabled) as? Bool ?? true
+			let outgoing = markdownOn ? MarkdownInputTransform.markdownToIRC(trimmed) : trimmed
 			// Split the same way the wire split runs, so local echo matches
 			// exactly what the server receives (and what other clients see).
-			for chunk in session.splitMessage(trimmed, for: channel.name) where !chunk.isEmpty {
+			for chunk in session.splitMessage(outgoing, for: channel.name) where !chunk.isEmpty {
 				let localEcho = Message(sender: sender, content: chunk, kind: .privmsg)
 				session.record(localEcho, in: channel)
 			}
 			Task {
-				try? await session.sendMessage(to: channel.name, content: trimmed)
+				try? await session.sendMessage(to: channel.name, content: outgoing)
 			}
 		}
 		draft = ""
@@ -1713,10 +1715,12 @@ struct DetachedChannelView: View {
 			// main-window `ChatView`.
 			Task { try? await session.connection.send(String(trimmed.dropFirst())) }
 		} else {
-			for chunk in session.splitMessage(trimmed, for: channel.name) where !chunk.isEmpty {
+			let markdownOn = UserDefaults.standard.object(forKey: PreferencesKeys.markdownInputEnabled) as? Bool ?? true
+			let outgoing = markdownOn ? MarkdownInputTransform.markdownToIRC(trimmed) : trimmed
+			for chunk in session.splitMessage(outgoing, for: channel.name) where !chunk.isEmpty {
 				session.record(Message(sender: sender, content: chunk, kind: .privmsg), in: channel)
 			}
-			Task { try? await session.sendMessage(to: channel.name, content: trimmed) }
+			Task { try? await session.sendMessage(to: channel.name, content: outgoing) }
 		}
 		draft = ""
 	}

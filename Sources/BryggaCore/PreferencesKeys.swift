@@ -29,4 +29,8 @@ public enum PreferencesKeys {
 	/// `GeneralPane` for the opt-out toggle. Reads are capped at 2 MB and
 	/// timed out at 10 s; only http and https schemes are followed.
 	public static let linkPreviewsEnabled = "brygga.linkPreviewsEnabled"
+
+	/// Rewrite `*bold*` / `_italic_` / `~strike~` to mIRC control codes
+	/// just before a message is sent. Defaults to true.
+	public static let markdownInputEnabled = "brygga.markdownInputEnabled"
 }
