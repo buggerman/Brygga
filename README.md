@@ -4,6 +4,12 @@ A modern, fast, feature-rich IRC client for macOS — built with Swift and Swift
 
 Brygga is in early development. The core client works end-to-end (connect, join, send, receive, persist) but many features you'd expect from a mature IRC client are still missing.
 
+## The name
+
+**Brygga** (Swedish, /ˈbrʏɡːa/ — roughly *BRUEG-ah*, with the `y` pronounced like German `ü` or French `u`) is the Swedish word for a **pier, jetty, or gangway** — the wooden walkway that connects the shore to a boat. A fitting name for a client whose job is to be the plank you walk across to reach the IRC networks on the other side.
+
+The same word also means *to brew* as a verb (as in beer), which is a nice coincidence given IRC culture.
+
 ## Requirements
 
 - macOS 15 Sequoia or later (looks best on macOS 26 with Liquid Glass materials, but falls back gracefully to the standard `.bar` / `.thinMaterial` / `.regularMaterial` surfaces on earlier releases)
