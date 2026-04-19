@@ -66,6 +66,7 @@ Everything a mIRC daily-driver expects, minus DCC and mIRC scripting.
 - MOTD display
 - `/away` moon indicator on sidebar server row and console header
 - **Status bar** — footer row showing the focused server's connection state (colored dot), nickname, live lag (from a 30 s client-initiated PING → PONG roundtrip), and total channel count
+- **Liquid Glass tuning** — main and detached windows use `.containerBackground(.thinMaterial, for: .window)`; `TopicBar`, `FindBar`, `InputBar`, `TypingIndicatorView`, and `StatusBarView` each use a coordinated material so chat chrome reads as a unified Liquid Glass stack; link-preview cards now float on `.regularMaterial`
 
 ### Persistence and storage
 
@@ -98,9 +99,7 @@ Inline-editing the Servers list (host / port / SASL / perform) is the one thing 
 
 ## Coming up
 
-Polish items still on the list, in the order we'd do them next:
-
-1. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
+Phase 1 / 2 / 3 are all shipped. Additional polish will surface from daily driving the client — nothing queued here right now.
 
 ## Out of scope (deliberate)
 

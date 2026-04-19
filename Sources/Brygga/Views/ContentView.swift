@@ -230,6 +230,7 @@ struct TypingIndicatorView: View {
 				}
 				.padding(.horizontal, 12)
 				.padding(.vertical, 3)
+				.background(.bar)
 			}
 		}
 	}
@@ -1098,12 +1099,15 @@ struct LinkPreviewView: View {
 					}
 					Spacer(minLength: 0)
 				}
-				.padding(8)
-				.background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.4)))
-				.overlay(
-					RoundedRectangle(cornerRadius: 6)
-						.strokeBorder(.quaternary, lineWidth: 1)
-				)
+				.padding(10)
+				.background {
+					RoundedRectangle(cornerRadius: 8)
+						.fill(.regularMaterial)
+				}
+				.overlay {
+					RoundedRectangle(cornerRadius: 8)
+						.strokeBorder(.quaternary.opacity(0.8), lineWidth: 1)
+				}
 			}
 			.buttonStyle(.plain)
 		}
@@ -1177,6 +1181,7 @@ struct InputBar: View {
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)
+		.background(.bar)
 	}
 
 	private func handleSubmit() {
