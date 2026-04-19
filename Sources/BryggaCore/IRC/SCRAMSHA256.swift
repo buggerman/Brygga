@@ -86,6 +86,9 @@ public struct SCRAMSHA256Client {
 	}
 
 	/// Verify the server's `v=<base64>` signature. Throws on mismatch.
+	/// Uses a constant-time byte compare so a timing oracle can't be
+	/// used to short-cut the server-signature check — defence in depth
+	/// on top of the TLS tunnel SCRAM already runs inside.
 	public mutating func verifyServerFinal(_ serverFinal: String) throws {
 		guard case .awaitingServerFinal(let expected) = step else {
 			throw SCRAMError.invalidState
@@ -94,10 +97,23 @@ public struct SCRAMSHA256Client {
 		guard let verB64 = attrs["v"], let received = Data(base64Encoded: verB64) else {
 			throw SCRAMError.malformedServerMessage
 		}
-		guard received == expected else {
+		guard Self.constantTimeEquals(received, expected) else {
 			throw SCRAMError.serverSignatureMismatch
 		}
 		step = .done
+	}
+
+	/// Length-checked byte-XOR-accumulate compare. Short-circuits **only**
+	/// on length mismatch (which isn't secret); for equal-length inputs
+	/// it visits every byte regardless of whether an early divergence
+	/// was found.
+	static func constantTimeEquals(_ a: Data, _ b: Data) -> Bool {
+		guard a.count == b.count else { return false }
+		var diff: UInt8 = 0
+		for i in 0..<a.count {
+			diff |= a[i] ^ b[i]
+		}
+		return diff == 0
 	}
 
 	public var isFinished: Bool { step == .done }

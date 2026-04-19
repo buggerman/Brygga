@@ -317,12 +317,6 @@ public final class IRCSession {
 		}
 	}
 
-	/// Logs an outgoing raw line to the server console and sends it.
-	public func sendRawEchoed(_ line: String) async throws {
-		recordServer(Message(sender: ">>", content: line, kind: .server))
-		try await connection.send(line)
-	}
-
 	// MARK: - Scrollback
 
 	/// One-shot lazy load for channels created outside `restoreFromStore`'s

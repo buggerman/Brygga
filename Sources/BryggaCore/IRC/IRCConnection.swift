@@ -184,13 +184,21 @@ public actor IRCConnection {
 		}
 	}
 
-	/// Send a raw IRC protocol line. The trailing `\r\n` is appended automatically.
+	/// Send a raw IRC protocol line. The trailing `\r\n` is appended
+	/// automatically, and any embedded CR / LF in the caller's line is
+	/// stripped first to prevent IRC command injection — otherwise a
+	/// user-supplied `/topic`, `/away`, `/me`, leave-reason, PRIVMSG
+	/// body, etc. could smuggle a second wire command via pasted or
+	/// adversarial text.
 	public func send(_ line: String, bypassRateLimit: Bool = false) async throws {
 		guard let conn = connection else {
 			throw ConnectionError.notConnected
 		}
 
-		let payload = Data((line + "\r\n").utf8)
+		let sanitized = line
+			.replacingOccurrences(of: "\r", with: "")
+			.replacingOccurrences(of: "\n", with: " ")
+		let payload = Data((sanitized + "\r\n").utf8)
 
 		if !bypassRateLimit {
 			await acquireTokens(payload.count)
