@@ -1518,11 +1518,12 @@ private struct GlobalFindMatchRow: View {
 		      let range = content.lowercased().range(of: needleLower)
 		else { return content }
 		let radius = 40
-		let start = content.index(range.lowerBound, offsetBy: -radius, limitedBy: content.startIndex) ?? content.startIndex
-		let end = content.index(range.upperBound, offsetBy: radius, limitedBy: content.endIndex) ?? content.endIndex
-		let prefix = start > content.startIndex ? "\u{2026}" : ""
-		let suffix = end < content.endIndex ? "\u{2026}" : ""
-		return prefix + content[start..<end] + suffix
+		let start: String.Index = content.index(range.lowerBound, offsetBy: -radius, limitedBy: content.startIndex) ?? content.startIndex
+		let end: String.Index = content.index(range.upperBound, offsetBy: radius, limitedBy: content.endIndex) ?? content.endIndex
+		let leading = start > content.startIndex ? "\u{2026}" : ""
+		let trailing = end < content.endIndex ? "\u{2026}" : ""
+		let middle = String(content[start..<end])
+		return leading + middle + trailing
 	}
 }
 
