@@ -1235,11 +1235,13 @@ struct InputBar: View {
 		onSubmit()
 	}
 
-	/// Throttled typing-indicator emitter. `active` once per 3 seconds while
-	/// the draft is non-empty; `done` as soon as the draft is emptied.
+	/// Throttled typing-indicator emitter. `active` once per 4 seconds while
+	/// the draft is a non-empty chat message; `done` as soon as the draft is
+	/// emptied. Slash-commands are suppressed — typing `/join #foo` shouldn't
+	/// tell everyone else you're typing to them.
 	private func emitTypingForDraftChange() {
 		guard onTyping != nil else { return }
-		if draft.isEmpty {
+		if draft.isEmpty || draft.hasPrefix("/") {
 			if lastTypingState != "done" {
 				onTyping?("done")
 				lastTypingState = "done"
@@ -1247,7 +1249,7 @@ struct InputBar: View {
 			return
 		}
 		let now = Date()
-		if lastTypingState != "active" || now.timeIntervalSince(lastTypingSent) > 3 {
+		if lastTypingState != "active" || now.timeIntervalSince(lastTypingSent) > 4 {
 			onTyping?("active")
 			lastTypingState = "active"
 			lastTypingSent = now

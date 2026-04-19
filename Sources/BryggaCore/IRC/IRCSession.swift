@@ -141,10 +141,10 @@ public final class IRCSession {
 	}
 
 	/// Sends an IRCv3 typing indicator (`+typing=active|paused|done`) to the
-	/// given target. Silently drops if the server hasn't negotiated
-	/// `message-tags` — the TAGMSG is still a valid IRC command but the
-	/// server is free to reject unknown tags.
+	/// given target. No-ops when the server hasn't negotiated `message-tags`
+	/// so we don't waste bytes (and don't get CLIENTTAGDENY'd).
 	public func sendTyping(state: String, to target: String) async throws {
+		guard await connection.enabledCaps.contains("message-tags") else { return }
 		try await connection.send("@+typing=\(state) TAGMSG \(target)")
 	}
 
@@ -537,6 +537,9 @@ public final class IRCSession {
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
 				record(msg, in: channel)
+				// The sender just finished a message — their typing indicator
+				// is implicitly cleared.
+				channel.typingUsers.removeValue(forKey: sender)
 				if !isOwnMessage(sender) {
 					channel.unreadCount += 1
 					if isHighlight {
@@ -557,6 +560,7 @@ public final class IRCSession {
 				server.channels.append(channel)
 				onChannelsChanged?()
 			}
+			channel.typingUsers.removeValue(forKey: sender)
 			record(msg, in: channel)
 			channel.unreadCount += 1
 			// PMs are inherently "for you" — always a highlight.
