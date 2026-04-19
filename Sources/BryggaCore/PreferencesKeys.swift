@@ -33,4 +33,9 @@ public enum PreferencesKeys {
 	/// Rewrite `*bold*` / `_italic_` / `~strike~` to mIRC control codes
 	/// just before a message is sent. Defaults to true.
 	public static let markdownInputEnabled = "brygga.markdownInputEnabled"
+
+	/// Share the IRCv3 typing indicator (`+typing` client tag via TAGMSG)
+	/// with other users on channels and in queries. Matches Halloy's
+	/// `buffer.typing.share`. Defaults to true. Receiving is always on.
+	public static let shareTypingEnabled = "brygga.shareTypingEnabled"
 }

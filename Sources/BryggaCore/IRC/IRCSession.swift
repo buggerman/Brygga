@@ -141,9 +141,16 @@ public final class IRCSession {
 	}
 
 	/// Sends an IRCv3 typing indicator (`+typing=active|paused|done`) to the
-	/// given target. No-ops when the server hasn't negotiated `message-tags`
-	/// so we don't waste bytes (and don't get CLIENTTAGDENY'd).
+	/// given target. No-ops when:
+	///  - the user has opted out via `PreferencesKeys.shareTypingEnabled`
+	///    (matches Halloy's `buffer.typing.share` toggle), or
+	///  - the server hasn't negotiated `message-tags` so we don't waste
+	///    bytes and don't risk CLIENTTAGDENY.
+	///
+	/// Receiving `+typing` is not gated — other users' indicators always show.
 	public func sendTyping(state: String, to target: String) async throws {
+		let sharingEnabled = UserDefaults.standard.object(forKey: PreferencesKeys.shareTypingEnabled) as? Bool ?? true
+		guard sharingEnabled else { return }
 		guard await connection.enabledCaps.contains("message-tags") else { return }
 		try await connection.send("@+typing=\(state) TAGMSG \(target)")
 	}
@@ -1046,19 +1053,38 @@ public final class IRCSession {
 	/// `active` keeps the sender visible in the indicator for 6s; `paused`
 	/// and `done` clear them immediately.
 	private func handleTagmsg(_ message: IRCLineParserResult) {
-		guard let target = message.params.first,
-		      let typing = message.tags["+typing"],
-		      let nick = message.senderNickname,
-		      !isOwnMessage(nick) else { return }
+		guard let target = message.params.first else { return }
+		// Accept both the standardized `+typing` and the pre-standardization
+		// `+draft/typing` tag name — some ircds still relay the draft form.
+		let typing = message.tags["+typing"] ?? message.tags["+draft/typing"]
+		guard let typing else { return }
+		guard let nick = message.senderNickname, !isOwnMessage(nick) else { return }
 
+		// Channel TAGMSG (target is a channel) lands in that channel's row.
+		// Direct TAGMSG (target is our nick) lands in the sender's query tab;
+		// the tab is auto-created so a typing indicator can show even before
+		// the first PRIVMSG arrives.
 		let channelName: String
-		if target.hasPrefix("#") || target.hasPrefix("&") {
+		let isChannelTarget = target.hasPrefix("#") || target.hasPrefix("&")
+		if isChannelTarget {
 			channelName = target
 		} else {
-			// TAGMSG to our own nick → treat as a query and attribute to the sender.
 			channelName = nick
 		}
-		guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
+
+		let channel: Channel
+		if let existing = server.channels.first(where: { $0.name == channelName }) {
+			channel = existing
+		} else if !isChannelTarget {
+			// Auto-open a query tab for incoming PM typing so the indicator
+			// shows up somewhere the user can actually see it.
+			channel = Channel(name: channelName)
+			channel.isPinned = server.pinnedChannels.contains(channelName.lowercased())
+			server.channels.append(channel)
+			onChannelsChanged?()
+		} else {
+			return
+		}
 
 		switch typing {
 		case "active":
