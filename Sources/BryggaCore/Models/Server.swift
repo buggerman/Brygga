@@ -36,6 +36,13 @@ public final class Server: Identifiable {
 	public var awayMessage: String?
 	public var state: ConnectionState = .disconnected
 	public var isExpanded: Bool = true
+	/// Most recent measured round-trip time to the server (seconds) from
+	/// our own `PING` / `PONG` pair. `nil` until the first pong arrives.
+	public var lag: TimeInterval?
+	/// Timestamp when the last client-initiated PING was sent; used both
+	/// by the status bar ("last pinged 3s ago") and to detect a stale
+	/// pong that should be discarded.
+	public var lastPingAt: Date?
 
 	public init(
 		name: String,

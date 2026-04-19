@@ -65,6 +65,7 @@ Everything a mIRC daily-driver expects, minus DCC and mIRC scripting.
 - CTCP auto-responses with per-sender cooldown: VERSION, PING, TIME, CLIENTINFO, SOURCE
 - MOTD display
 - `/away` moon indicator on sidebar server row and console header
+- **Status bar** — footer row showing the focused server's connection state (colored dot), nickname, live lag (from a 30 s client-initiated PING → PONG roundtrip), and total channel count
 
 ### Persistence and storage
 
@@ -99,8 +100,7 @@ Inline-editing the Servers list (host / port / SASL / perform) is the one thing 
 
 Polish items still on the list, in the order we'd do them next:
 
-1. **Status bar** — connection state, lag, server ping.
-2. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
+1. **Liquid Glass tuning** on chat surface, sidebar, and inspector.
 
 ## Out of scope (deliberate)
 

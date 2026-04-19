@@ -48,6 +48,14 @@ public final class IRCSession {
 
 	private var runTask: Task<Void, Never>?
 
+	/// Periodic client-initiated PING task that measures round-trip lag
+	/// and keeps the connection warm. Started on 001, cancelled on stop.
+	private var pingTask: Task<Void, Never>?
+
+	/// Tokens of client-initiated PINGs waiting for a matching PONG, keyed
+	/// by token string → send timestamp. Used to derive `Server.lag`.
+	private var pendingPings: [String: Date] = [:]
+
 	public init(server: Server, connection: IRCConnection) {
 		self.server = server
 		self.connection = connection
@@ -82,6 +90,7 @@ public final class IRCSession {
 		reconnectTask?.cancel()
 		reconnectTask = nil
 		stopNotifyPolling()
+		stopPingLoop()
 		runTask?.cancel()
 		runTask = nil
 	}
@@ -265,6 +274,7 @@ public final class IRCSession {
 		switch message.command {
 		case "PRIVMSG": handlePrivmsg(message)
 		case "TAGMSG":  handleTagmsg(message)
+		case "PONG":    handlePong(message)
 		case "NOTICE":  handleNotice(message)
 		case "JOIN":    handleJoin(message)
 		case "PART":    handlePart(message)
@@ -350,6 +360,7 @@ public final class IRCSession {
 		switch state {
 		case .disconnected, .failed:
 			server.state = .disconnected
+			stopPingLoop()
 			scheduleReconnectIfNeeded()
 		case .connecting:
 			server.state = .connecting
@@ -357,6 +368,7 @@ public final class IRCSession {
 			server.state = .connected
 		case .disconnecting:
 			server.state = .disconnecting
+			stopPingLoop()
 		}
 	}
 
@@ -400,6 +412,7 @@ public final class IRCSession {
 		case 1:
 			server.state = .registered
 			reconnectAttempt = 0
+			startPingLoop()
 			// 001's first param is the nick the server assigned us. The server is
 			// authoritative — on some networks (e.g., Ergo with
 			// force-nick-equals-account) our SASL-authenticated nick may differ
@@ -989,6 +1002,40 @@ public final class IRCSession {
 			}
 		}
 		return false
+	}
+
+	// MARK: - Lag measurement
+
+	/// Begin the periodic client-initiated PING loop. Sends a PING every
+	/// 30 s while the connection stays active; each tick's timestamp doubles
+	/// as the token we match against the incoming PONG to compute lag.
+	private func startPingLoop() {
+		stopPingLoop()
+		pingTask = Task { @MainActor [weak self] in
+			while let self, !Task.isCancelled {
+				guard self.server.isActive else { return }
+				let token = "bryggaping\(Int(Date().timeIntervalSince1970 * 1000))"
+				self.pendingPings[token] = Date()
+				self.server.lastPingAt = Date()
+				try? await self.connection.send("PING :\(token)")
+				try? await Task.sleep(nanoseconds: 30_000_000_000)
+			}
+		}
+	}
+
+	private func stopPingLoop() {
+		pingTask?.cancel()
+		pingTask = nil
+		pendingPings.removeAll()
+		server.lag = nil
+	}
+
+	/// Match an incoming PONG against the outstanding PING tokens and
+	/// publish the round-trip time on `server.lag`.
+	private func handlePong(_ message: IRCLineParserResult) {
+		guard let token = message.params.last,
+		      let sentAt = pendingPings.removeValue(forKey: token) else { return }
+		server.lag = Date().timeIntervalSince(sentAt)
 	}
 
 	/// Handles an incoming TAGMSG carrying an IRCv3 `+typing` client tag.

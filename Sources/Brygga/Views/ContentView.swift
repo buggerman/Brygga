@@ -14,20 +14,24 @@ struct ContentView: View {
 	var body: some View {
 		@Bindable var appState = appState
 
-		NavigationSplitView {
-			SidebarView()
-				.navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
-		} detail: {
-			ChatView()
-				.inspector(isPresented: Binding(
-					get: { shouldShowUserList },
-					set: { _ in }
-				)) {
-					UserListView()
-						.inspectorColumnWidth(min: 160, ideal: 200, max: 300)
-				}
+		VStack(spacing: 0) {
+			NavigationSplitView {
+				SidebarView()
+					.navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
+			} detail: {
+				ChatView()
+					.inspector(isPresented: Binding(
+						get: { shouldShowUserList },
+						set: { _ in }
+					)) {
+						UserListView()
+							.inspectorColumnWidth(min: 160, ideal: 200, max: 300)
+					}
+			}
+			.navigationSplitViewStyle(.balanced)
+			Divider()
+			StatusBarView()
 		}
-		.navigationSplitViewStyle(.balanced)
 		.sheet(isPresented: $appState.showingConnectSheet) {
 			ConnectSheet()
 				.environment(appState)
@@ -236,6 +240,87 @@ struct TypingIndicatorView: View {
 		case 2:  return "\(names[0]) and \(names[1]) are typing\u{2026}"
 		default: return "Several people are typing\u{2026}"
 		}
+	}
+}
+
+// MARK: - Status bar
+
+/// Thin footer showing the focused server's connection state, nickname,
+/// round-trip lag, and total channel count. Updates live off the
+/// `@Observable` models.
+@MainActor
+struct StatusBarView: View {
+	@Environment(AppState.self) private var appState
+
+	private var focusedServer: Server? {
+		appState.selectedServer ?? appState.servers.first
+	}
+
+	private var totalChannels: Int {
+		appState.servers.reduce(0) { $0 + $1.channels.filter { !$0.isPrivateMessage }.count }
+	}
+
+	var body: some View {
+		HStack(spacing: 10) {
+			if let server = focusedServer {
+				Circle()
+					.fill(dotColor(for: server.state))
+					.frame(width: 7, height: 7)
+				Text("\(server.name)")
+					.foregroundStyle(.primary)
+				Text("/\(server.nickname)")
+					.foregroundStyle(.secondary)
+				if let lag = server.lag {
+					Text("lag \(formatLag(lag))")
+						.foregroundStyle(.secondary)
+						.monospacedDigit()
+				} else {
+					Text(stateLabel(for: server.state))
+						.foregroundStyle(.secondary)
+				}
+			} else {
+				Circle()
+					.fill(Color.gray)
+					.frame(width: 7, height: 7)
+				Text("No server")
+					.foregroundStyle(.secondary)
+			}
+
+			Spacer()
+
+			Text("\(totalChannels) channel\(totalChannels == 1 ? "" : "s")")
+				.foregroundStyle(.secondary)
+		}
+		.font(.system(size: 11))
+		.padding(.horizontal, 12)
+		.padding(.vertical, 4)
+		.frame(maxWidth: .infinity)
+		.background(.bar)
+	}
+
+	private func dotColor(for state: Server.ConnectionState) -> Color {
+		switch state {
+		case .registered, .connected: return .green
+		case .connecting:              return .yellow
+		case .disconnecting:           return .orange
+		case .disconnected:            return .gray
+		}
+	}
+
+	private func stateLabel(for state: Server.ConnectionState) -> String {
+		switch state {
+		case .registered, .connected: return "connected"
+		case .connecting:              return "connecting\u{2026}"
+		case .disconnecting:           return "disconnecting\u{2026}"
+		case .disconnected:            return "offline"
+		}
+	}
+
+	private func formatLag(_ seconds: TimeInterval) -> String {
+		let ms = seconds * 1000
+		if ms < 1 { return "<1 ms" }
+		if ms < 1000 { return "\(Int(ms)) ms" }
+		return String(format: "%.2f s", seconds)
 	}
 }
 
