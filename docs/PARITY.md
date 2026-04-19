@@ -54,16 +54,19 @@ Phase 1 is effectively complete — everything a mIRC daily-driver expects (minu
 - Preferences window (`Cmd+,`) — General pane (show joins/parts, auto-join-on-invite, disk logging) + Notifications pane (highlight keywords)
 - `/away` moon indicator on sidebar server row and console header
 
-## Phase 1 — remaining
+## Phase 1 — complete
 
-The only Phase 1 item still open is Preferences-window breadth. Functionality exists; UI coverage lags.
+Phase 1 is done. The Preferences window now has seven panes:
 
-1. **Preferences window expansion** — currently has General + Notifications. Add:
-   - **Identity** — default nick / user / real name used by the Connect sheet
-   - **Appearance** — timestamp format (12h/24h), line spacing, nick-colors on/off toggle
-   - **Ignore** — per-server ignore-list table editor (list mutation today requires `/ignore`)
-   - **Logging** — currently a section inside General; promote to its own pane with log folder picker and a "reveal in Finder" button
-   - **Servers** — edit saved servers (host, port, SASL creds, perform list, auto-join) without removing + re-adding
+- **General** — show joins/parts, auto-join-on-invite
+- **Identity** — default nick / user name / real name for the Connect sheet
+- **Appearance** — timestamp format (System / 12-hour / 24-hour), colorize nicknames toggle
+- **Notifications** — highlight keywords list
+- **Ignore** — per-server ignore-list table editor with add/remove
+- **Logging** — disk-logging toggle, log-folder path, Reveal-in-Finder button
+- **Servers** — list of saved servers with summary (host, TLS, nick, joined channels, perform count) and a Remove button
+
+Opened via `Cmd+,` like any macOS settings window. Inline-editing the Servers list (host / port / SASL / perform) is the one thing not yet covered — that UI lands in a Phase 2 pass when there's demand.
 
 ## Phase 2 — Modern-native wins
 
@@ -105,12 +108,15 @@ Not building these, and not feeling bad about it:
 
 ## Suggested next commit order
 
-Phase 1 closes with a proper Preferences expansion; Phase 2 opens with chathistory.
+Phase 2 is up. Recommended path:
 
-1. **Preferences expansion** — Identity, Appearance, per-server Ignore editor, Logging pane, Servers editor.
-2. **IRCv3 `chathistory`** (Phase 2 #1) — fills the "you missed it" gap and benefits from the CAP plumbing already in place.
-3. **Detachable tabs** (Phase 2 #5) — `Cmd+Shift+D` pops the selected channel into its own window.
-4. **Favorites / pinned channels** (Phase 2 #6) — sidebar ordering + keyboard-first navigation.
-5. **SASL SCRAM-SHA-256** (Phase 2 #7) — add after chathistory, before EXTERNAL.
+1. **IRCv3 `chathistory`** (Phase 2 #1) — fills the "you missed it" gap and benefits from the CAP plumbing already in place.
+2. **Detachable tabs** (Phase 2 #5) — `Cmd+Shift+D` pops the selected channel into its own window.
+3. **Favorites / pinned channels** (Phase 2 #6) — sidebar ordering + keyboard-first navigation.
+4. **SASL SCRAM-SHA-256** (Phase 2 #7) — add after chathistory, before EXTERNAL.
+5. **IRCv3 typing indicator** (Phase 2 #2).
+6. **Find across all channels** (Phase 2 #4) — `Cmd+Shift+F`.
+7. **Inline link previews** (Phase 2 #3) — image / OG fetch, opt-in.
+8. **SASL EXTERNAL** (Phase 2 #8) — client-cert auth.
 
-Then the rest of Phase 2 and Phase 3 in whichever order the friend group starts asking for.
+Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.
