@@ -65,6 +65,19 @@ struct SidebarView: View {
 				}
 			} else {
 				List(selection: $appState.selection) {
+					let pinned = appState.pinnedChannels
+					if !pinned.isEmpty {
+						Section("Favorites") {
+							ForEach(pinned) { channel in
+								ChannelRow(channel: channel, serverName: serverName(for: channel))
+									.tag(Optional(channel.id))
+									.contextMenu {
+										Button("Unpin") { appState.togglePin(channelID: channel.id) }
+									}
+							}
+						}
+					}
+
 					ForEach(appState.servers) { server in
 						ServerRow(server: server)
 							.tag(Optional(server.id))
@@ -88,6 +101,11 @@ struct SidebarView: View {
 							ChannelRow(channel: channel)
 								.tag(Optional(channel.id))
 								.padding(.leading, 12)
+								.contextMenu {
+									Button(channel.isPinned ? "Unpin" : "Pin to Favorites") {
+										appState.togglePin(channelID: channel.id)
+									}
+								}
 						}
 					}
 				}
@@ -95,6 +113,13 @@ struct SidebarView: View {
 			}
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
+	}
+
+	private func serverName(for channel: Channel) -> String? {
+		for server in appState.servers where server.channels.contains(where: { $0.id == channel.id }) {
+			return server.name
+		}
+		return nil
 	}
 }
 
@@ -128,11 +153,20 @@ struct ServerRow: View {
 
 struct ChannelRow: View {
 	let channel: Channel
+	var serverName: String? = nil
 
 	var body: some View {
 		HStack {
-			Text(channel.name)
-				.lineLimit(1)
+			VStack(alignment: .leading, spacing: 0) {
+				Text(channel.name)
+					.lineLimit(1)
+				if let serverName {
+					Text(serverName)
+						.font(.system(size: 10))
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+				}
+			}
 
 			Spacer()
 

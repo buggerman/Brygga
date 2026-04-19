@@ -56,6 +56,18 @@ struct BryggaApp: App {
 				Button("Leave Channel") { }
 					.keyboardShortcut("w", modifiers: [.command])
 			}
+			CommandMenu("Favorites") {
+				ForEach(0..<9, id: \.self) { index in
+					let pinned = appState.pinnedChannels
+					Button(pinned.indices.contains(index) ? pinned[index].name : "Favorite \(index + 1)") {
+						let current = appState.pinnedChannels
+						guard current.indices.contains(index) else { return }
+						appState.selection = current[index].id
+					}
+					.keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command])
+					.disabled(!pinned.indices.contains(index))
+				}
+			}
 		}
 
 		WindowGroup(id: "channel", for: String.self) { $channelID in

@@ -18,6 +18,10 @@ public final class Channel: Identifiable {
 	public var unreadCount: Int = 0
 	public var highlightCount: Int = 0
 	public var isJoined: Bool = false
+	/// User-pinned favorite. Pinned channels appear in a dedicated section
+	/// at the top of the sidebar and are reachable via Cmd+1…9. Persisted
+	/// by name on the owning server's config.
+	public var isPinned: Bool = false
 	/// Message ID of the last message the user saw before navigating away.
 	/// MessageList uses this to render a "new" divider above the first
 	/// unread message when the user returns. Transient — not persisted.

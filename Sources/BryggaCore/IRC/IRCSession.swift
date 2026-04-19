@@ -234,6 +234,7 @@ public final class IRCSession {
 			return existing
 		}
 		let channel = Channel(name: target)
+		channel.isPinned = server.pinnedChannels.contains(target.lowercased())
 		server.channels.append(channel)
 		onChannelsChanged?()
 		return channel
@@ -530,6 +531,7 @@ public final class IRCSession {
 				channel = existing
 			} else {
 				channel = Channel(name: queryName)
+				channel.isPinned = server.pinnedChannels.contains(queryName.lowercased())
 				server.channels.append(channel)
 				onChannelsChanged?()
 			}
@@ -1015,6 +1017,7 @@ public final class IRCSession {
 				channel = existing
 			} else {
 				channel = Channel(name: channelName)
+				channel.isPinned = server.pinnedChannels.contains(channelName.lowercased())
 				server.channels.append(channel)
 			}
 			channel.isJoined = true

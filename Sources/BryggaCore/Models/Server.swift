@@ -24,6 +24,10 @@ public final class Server: Identifiable {
 	public var ignoreList: [String] = []
 	public var notifyList: [String] = []
 	public var performCommands: [String] = []
+	/// Lowercased names of user-pinned channels on this server. Mirrored
+	/// onto `Channel.isPinned` whenever a channel with a matching name is
+	/// created or the pin set changes.
+	public var pinnedChannels: [String] = []
 	public var isAway: Bool = false
 	public var awayMessage: String?
 	public var state: ConnectionState = .disconnected

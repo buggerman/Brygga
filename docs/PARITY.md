@@ -84,8 +84,8 @@ These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "mod
 1. **IRCv3 typing indicator** for servers supporting the cap.
 2. **Inline link previews** — image / OG-title fetch for URLs (opt-in, off by default).
 3. **Find across all channels** (`Cmd+Shift+F`).
-4. **Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).
-5. **Favorites / pinned channels** in the sidebar.
+4. ~~**Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).~~ Shipped — each channel gets its own `WindowGroup` window reusing `TopicBar` / `MessageList` / `InputBar` over a shared `AppState`.
+5. ~~**Favorites / pinned channels** in the sidebar.~~ Shipped — right-click → Pin to Favorites moves channels into a top sidebar section, `Cmd+1…9` jumps to the first nine pinned channels, pin state is persisted per server in `servers.json`.
 6. **SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.
 7. **SASL EXTERNAL** — client-certificate auth for networks that allow it.
 
@@ -118,12 +118,10 @@ Not building these, and not feeling bad about it:
 
 Phase 2 is up. Recommended path:
 
-1. **Detachable tabs** (Phase 2 #4) — `Cmd+Shift+D` pops the selected channel into its own window.
-2. **Favorites / pinned channels** (Phase 2 #5) — sidebar ordering + keyboard-first navigation.
-3. **SASL SCRAM-SHA-256** (Phase 2 #6) — stronger than PLAIN; Ergo supports it.
-4. **IRCv3 typing indicator** (Phase 2 #1).
-5. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
-6. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
-7. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
+1. **SASL SCRAM-SHA-256** (Phase 2 #6) — stronger than PLAIN; Ergo supports it.
+2. **IRCv3 typing indicator** (Phase 2 #1).
+3. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
+4. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
+5. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
 
 Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.

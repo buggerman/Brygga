@@ -103,10 +103,13 @@ public final class AppState {
 				saslPassword: config.saslPassword,
 				ignoreList: config.ignoreList,
 				notifyList: config.notifyList,
-				performCommands: config.performCommands
+				performCommands: config.performCommands,
+				pinnedChannels: config.pinnedChannels
 			)
 			for nick in config.openQueries {
-				server.channels.append(Channel(name: nick))
+				let ch = Channel(name: nick)
+				ch.isPinned = server.pinnedChannels.contains(nick.lowercased())
+				server.channels.append(ch)
 			}
 			// Rehydrate scrollback for server console + every known channel.
 			Task { [server] in
@@ -150,7 +153,8 @@ public final class AppState {
 				saslPassword: server.saslPassword,
 				ignoreList: server.ignoreList,
 				notifyList: server.notifyList,
-				performCommands: server.performCommands
+				performCommands: server.performCommands,
+				pinnedChannels: server.pinnedChannels
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -221,7 +225,8 @@ public final class AppState {
 		saslPassword: String? = nil,
 		ignoreList: [String] = [],
 		notifyList: [String] = [],
-		performCommands: [String] = []
+		performCommands: [String] = [],
+		pinnedChannels: [String] = []
 	) -> Server {
 		let server = Server(
 			name: name.isEmpty ? host : name,
@@ -235,6 +240,7 @@ public final class AppState {
 		server.ignoreList = ignoreList
 		server.notifyList = notifyList
 		server.performCommands = performCommands
+		server.pinnedChannels = pinnedChannels.map { $0.lowercased() }
 		let connection = IRCConnection(
 			host: host,
 			port: port,
@@ -294,6 +300,34 @@ public final class AppState {
 					await session.connection.disconnect(quitMessage: quitMessage)
 				}
 			}
+		}
+	}
+
+	/// Toggles the pinned state of a channel, updates the owning server's
+	/// pinned-name list, and persists. Pinned channels appear in the
+	/// sidebar's Favorites section and are reachable via Cmd+1…9.
+	public func togglePin(channelID: String) {
+		for server in servers {
+			guard let channel = server.channels.first(where: { $0.id == channelID }) else { continue }
+			channel.isPinned.toggle()
+			let key = channel.name.lowercased()
+			if channel.isPinned {
+				if !server.pinnedChannels.contains(key) {
+					server.pinnedChannels.append(key)
+				}
+			} else {
+				server.pinnedChannels.removeAll { $0 == key }
+			}
+			persist()
+			return
+		}
+	}
+
+	/// Ordered list of pinned channels across every server. Used by the
+	/// sidebar's Favorites section and the Cmd+1…9 keyboard shortcuts.
+	public var pinnedChannels: [Channel] {
+		servers.flatMap { server in
+			server.channels.filter(\.isPinned)
 		}
 	}
 
