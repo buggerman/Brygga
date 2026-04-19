@@ -25,12 +25,22 @@ struct PreferencesView: View {
 struct GeneralPane: View {
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
 	@AppStorage(PreferencesKeys.autoJoinOnInvite) private var autoJoinOnInvite = false
+	@AppStorage(PreferencesKeys.diskLoggingEnabled) private var diskLoggingEnabled = false
 
 	var body: some View {
 		Form {
 			Section("Channels") {
 				Toggle("Show joins and parts in channels", isOn: $showJoinsParts)
 				Toggle("Auto-join channels when invited", isOn: $autoJoinOnInvite)
+			}
+			Section {
+				Toggle("Write plain-text logs to disk", isOn: $diskLoggingEnabled)
+			} header: {
+				Text("Logging")
+			} footer: {
+				Text("Logs are written to ~/Documents/Brygga Logs/<network>/<channel>.log. This is in addition to the in-app scrollback (which always persists).")
+					.font(.caption)
+					.foregroundStyle(.secondary)
 			}
 		}
 		.formStyle(.grouped)

@@ -292,6 +292,7 @@ public final class IRCSession {
 		Task {
 			await ScrollbackStore.shared.append(serverId: sid, target: target, message: message)
 		}
+		logToDiskIfEnabled(message, target: target)
 	}
 
 	/// Persist-through append for the server console.
@@ -300,6 +301,35 @@ public final class IRCSession {
 		let sid = server.id
 		Task {
 			await ScrollbackStore.shared.append(serverId: sid, target: "__server__", message: message)
+		}
+		logToDiskIfEnabled(message, target: "server")
+	}
+
+	private func logToDiskIfEnabled(_ message: Message, target: String) {
+		guard UserDefaults.standard.bool(forKey: PreferencesKeys.diskLoggingEnabled) else { return }
+		let network = server.name
+		let line = Self.formatLogLine(message)
+		let ts = message.timestamp
+		Task {
+			await DiskLogger.shared.append(network: network, target: target, line: line, timestamp: ts)
+		}
+	}
+
+	private static func formatLogLine(_ msg: Message) -> String {
+		switch msg.kind {
+		case .privmsg:       return "<\(msg.sender)> \(msg.content)"
+		case .action:        return "* \(msg.sender) \(msg.content)"
+		case .notice:        return "-\(msg.sender)- \(msg.content)"
+		case .server:
+			let sender = msg.sender.isEmpty ? "" : "\(msg.sender) "
+			return "-- \(sender)\(msg.content)"
+		case .join:          return "* \(msg.sender) \(msg.content)"
+		case .part:          return "* \(msg.sender) \(msg.content)"
+		case .quit:          return "* \(msg.sender) \(msg.content)"
+		case .nick:          return "* \(msg.sender) \(msg.content)"
+		case .kick:          return "* \(msg.content)"
+		case .topic:         return "* \(msg.sender) changed topic to: \(msg.content)"
+		case .mode:          return "* \(msg.sender) \(msg.content)"
 		}
 	}
 
