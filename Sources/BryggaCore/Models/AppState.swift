@@ -31,6 +31,10 @@ public final class AppState {
 	/// Coordination flag for presenting the channel-list browser.
 	public var showingChannelList: Bool = false
 
+	/// Coordination flag for presenting the cross-channel Find sheet
+	/// (`Cmd+Shift+F`).
+	public var showingGlobalFind: Bool = false
+
 	public init() {
 		restoreFromStore()
 		requestNotificationPermission()

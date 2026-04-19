@@ -83,7 +83,7 @@ These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "mod
 
 1. ~~**IRCv3 typing indicator** for servers supporting the cap.~~ Shipped — TAGMSG `+typing` client tag, throttled (active every 3s, done on submit/empty), status row above the InputBar via `TimelineView` auto-expiry.
 2. **Inline link previews** — image / OG-title fetch for URLs (opt-in, off by default).
-3. **Find across all channels** (`Cmd+Shift+F`).
+3. ~~**Find across all channels** (`Cmd+Shift+F`).~~ Shipped — modal sheet searches content + senders across every server/channel/query, capped at 300 most-recent hits; click a result to navigate to the channel.
 4. ~~**Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).~~ Shipped — each channel gets its own `WindowGroup` window reusing `TopicBar` / `MessageList` / `InputBar` over a shared `AppState`.
 5. ~~**Favorites / pinned channels** in the sidebar.~~ Shipped — right-click → Pin to Favorites moves channels into a top sidebar section, `Cmd+1…9` jumps to the first nine pinned channels, pin state is persisted per server in `servers.json`.
 6. ~~**SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.~~ Shipped — auto-selected when the server advertises it in `CAP LS sasl=…`; verified against the RFC 7677 test vector.
@@ -118,8 +118,7 @@ Not building these, and not feeling bad about it:
 
 Phase 2 is up. Recommended path:
 
-1. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
-2. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
-3. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
+1. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
+2. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
 
 Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.

@@ -36,6 +36,10 @@ struct ContentView: View {
 			ChannelListSheet()
 				.environment(appState)
 		}
+		.sheet(isPresented: $appState.showingGlobalFind) {
+			GlobalFindSheet()
+				.environment(appState)
+		}
 	}
 
 	private var shouldShowUserList: Bool {
@@ -308,6 +312,12 @@ struct ChatView: View {
 			Button("Detach") { detach() }
 				.keyboardShortcut("d", modifiers: [.command, .shift])
 				.hidden()
+
+			Button("Find in All Channels") {
+				appState.showingGlobalFind = true
+			}
+			.keyboardShortcut("f", modifiers: [.command, .shift])
+			.hidden()
 		}
 	}
 
@@ -1041,6 +1051,161 @@ struct InputBar: View {
 			historyIndex = nil
 			draft = draftBeforeHistory
 		}
+	}
+}
+
+// MARK: - Global find (cross-channel)
+
+private struct GlobalFindMatch: Identifiable {
+	let id = UUID()
+	let serverName: String
+	let channelName: String
+	let channelID: String
+	let message: Message
+}
+
+@MainActor
+struct GlobalFindSheet: View {
+	@Environment(AppState.self) private var appState
+	@Environment(\.dismiss) private var dismiss
+	@State private var query: String = ""
+	@FocusState private var queryFocused: Bool
+
+	private var matches: [GlobalFindMatch] {
+		let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+		guard !needle.isEmpty else { return [] }
+		var out: [GlobalFindMatch] = []
+		for server in appState.servers {
+			for channel in server.channels {
+				for message in channel.messages
+				where message.content.lowercased().contains(needle)
+				   || message.sender.lowercased().contains(needle) {
+					out.append(GlobalFindMatch(
+						serverName: server.name,
+						channelName: channel.name,
+						channelID: channel.id,
+						message: message
+					))
+				}
+			}
+		}
+		// Newest first, capped so a huge scrollback doesn't freeze layout.
+		return out.sorted(by: { $0.message.timestamp > $1.message.timestamp })
+			.prefix(300)
+			.map { $0 }
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			HStack {
+				Text("Find in All Channels")
+					.font(.headline)
+				Spacer()
+				Button("Done") { dismiss() }
+					.keyboardShortcut(.cancelAction)
+			}
+			.padding(.horizontal, 20)
+			.padding(.top, 20)
+			.padding(.bottom, 10)
+
+			HStack(spacing: 8) {
+				Image(systemName: "magnifyingglass")
+					.foregroundStyle(.secondary)
+				TextField("Search across every channel and query\u{2026}", text: $query)
+					.textFieldStyle(.plain)
+					.focused($queryFocused)
+					.onSubmit {
+						if let first = matches.first { open(first) }
+					}
+			}
+			.padding(10)
+			.background(RoundedRectangle(cornerRadius: 6).fill(.thinMaterial))
+			.padding(.horizontal, 20)
+			.padding(.bottom, 8)
+
+			Divider()
+
+			if query.trimmingCharacters(in: .whitespaces).isEmpty {
+				ContentUnavailableView {
+					Label("Start typing", systemImage: "magnifyingglass")
+				} description: {
+					Text("Search content and senders across every channel and query.")
+				}
+				.frame(maxWidth: .infinity, maxHeight: .infinity)
+			} else if matches.isEmpty {
+				ContentUnavailableView {
+					Label("No matches", systemImage: "magnifyingglass")
+				} description: {
+					Text("Nothing in scrollback matches \u{201C}\(query)\u{201D}.")
+				}
+				.frame(maxWidth: .infinity, maxHeight: .infinity)
+			} else {
+				List(matches) { match in
+					Button {
+						open(match)
+					} label: {
+						GlobalFindMatchRow(match: match, needle: query)
+					}
+					.buttonStyle(.plain)
+				}
+				.listStyle(.plain)
+			}
+		}
+		.frame(minWidth: 560, minHeight: 420)
+		.onAppear { queryFocused = true }
+	}
+
+	private func open(_ match: GlobalFindMatch) {
+		appState.selection = match.channelID
+		dismiss()
+	}
+}
+
+private struct GlobalFindMatchRow: View {
+	let match: GlobalFindMatch
+	let needle: String
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 2) {
+			HStack(spacing: 6) {
+				Text(match.serverName)
+					.foregroundStyle(.secondary)
+				Text("/")
+					.foregroundStyle(.tertiary)
+				Text(match.channelName)
+					.foregroundStyle(.primary)
+				Spacer()
+				Text(match.message.timestamp, format: .dateTime.hour().minute())
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			.font(.caption.weight(.medium))
+
+			HStack(alignment: .firstTextBaseline, spacing: 6) {
+				Text(match.message.sender)
+					.font(.system(.body, design: .monospaced))
+					.foregroundStyle(.secondary)
+				Text(snippet)
+					.lineLimit(2)
+			}
+		}
+		.padding(.vertical, 2)
+	}
+
+	/// Centre a ~80-char window around the first match so long lines don't
+	/// push the hit off-screen.
+	private var snippet: String {
+		let content = match.message.content
+		let needleLower = needle.lowercased()
+		guard !needleLower.isEmpty,
+		      let range = content.lowercased().range(of: needleLower)
+		else { return content }
+		let radius = 40
+		let start = content.index(range.lowerBound, offsetBy: -radius, limitedBy: content.startIndex) ?? content.startIndex
+		let end = content.index(range.upperBound, offsetBy: radius, limitedBy: content.endIndex) ?? content.endIndex
+		let prefix = start > content.startIndex ? "\u{2026}" : ""
+		let suffix = end < content.endIndex ? "\u{2026}" : ""
+		return prefix + content[start..<end] + suffix
 	}
 }
 
