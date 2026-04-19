@@ -1,0 +1,103 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more of the fields below you can fill in, the faster we can reproduce.
+
+        Before filing: please check [existing issues](https://github.com/buggerman/Brygga/issues?q=is%3Aissue) and [docs/PARITY.md](https://github.com/buggerman/Brygga/blob/main/docs/PARITY.md) — the feature you're missing might be explicitly out of scope (e.g. DCC file transfer, mIRC scripting).
+
+  - type: input
+    id: version
+    attributes:
+      label: Brygga version
+      description: Shown in `Brygga → About Brygga`, or the release title for a nightly (e.g. `Brygga nightly (build 49 — 4aea1db)`).
+      placeholder: "e.g. 0.1.2 or nightly build 49 / 4aea1db"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Release channel
+      options:
+        - Stable (v* tag)
+        - Nightly
+        - Built from source
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: "`About This Mac` → the full version string, e.g. `15.4 (24E248)` or `26.0 (25A5279m)`."
+      placeholder: "e.g. 15.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Hardware
+      options:
+        - Apple Silicon (arm64)
+        - Intel (x86_64)
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list. Include the exact slash command, text, keyboard shortcut, or mouse interaction.
+      placeholder: |
+        1. Connect to irc.libera.chat on 6697 with TLS
+        2. Join #brygga
+        3. Type `/topic foo\r\nPRIVMSG #evil :bar`
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: If Brygga crashed, paste the crash report from `~/Library/Logs/DiagnosticReports/Brygga-*.ips`.
+    validations:
+      required: true
+
+  - type: input
+    id: network
+    attributes:
+      label: IRC network (if relevant)
+      description: "e.g. `irc.libera.chat`, `irc.oftc.net`, `irc.ergo.chat`. Leave blank if the bug is UI-only."
+      placeholder: "e.g. irc.libera.chat"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        If disk logging is on (default), grep for the channel under `~/Library/Logs/Brygga/`. For anything involving connection setup, launching via `./build/Brygga.app/Contents/MacOS/Brygga` surfaces stderr — paste the last ~50 lines.
+      render: shell
+
+  - type: checkboxes
+    id: acks
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I've checked [existing issues](https://github.com/buggerman/Brygga/issues?q=is%3Aissue) for duplicates.
+          required: true
+        - label: I've confirmed this isn't explicitly out of scope in [docs/PARITY.md](https://github.com/buggerman/Brygga/blob/main/docs/PARITY.md).
+          required: true

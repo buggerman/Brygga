@@ -1,0 +1,54 @@
+name: Feature request
+description: Suggest a new feature or an improvement to an existing one
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: check [docs/PARITY.md](https://github.com/buggerman/Brygga/blob/main/docs/PARITY.md). Some features are **explicitly out of scope** (DCC file transfer, mIRC scripting, Objective-C interop). Requests for those will be closed regardless of how compelling the use case is.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What do you want to be able to do?
+      description: One or two sentences. No need to propose an implementation yet.
+      placeholder: "e.g. I want to pin a specific message in a channel so I can find it again without scrolling."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why do you want this?
+      description: What does your workflow look like today, and what's painful about it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: Other Brygga features, workarounds, or other IRC clients that do this well.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Does this look like it fits mIRC parity, or is it new territory?
+      options:
+        - "mIRC has this; I want parity"
+        - "mIRC doesn't have this, but it's table-stakes for a modern macOS client"
+        - "Neither; it's a fresh idea"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acks
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I've checked [existing issues](https://github.com/buggerman/Brygga/issues?q=is%3Aissue) for duplicates.
+          required: true
+        - label: I've read the "Explicitly out of scope" list in [docs/PARITY.md](https://github.com/buggerman/Brygga/blob/main/docs/PARITY.md) and this request is not in it.
+          required: true

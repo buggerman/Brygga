@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: mIRC parity plan
+    url: https://github.com/buggerman/Brygga/blob/main/docs/PARITY.md
+    about: Before opening a feature request, check whether the feature is already planned or explicitly out of scope.
+  - name: Agent / contributor rules
+    url: https://github.com/buggerman/Brygga/blob/main/AGENTS.md
+    about: Rules for humans and AI agents working in this repo — architecture invariants, code style, PR format.
