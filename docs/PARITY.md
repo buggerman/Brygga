@@ -89,7 +89,7 @@ Footer row below the split view, visible in every window:
 
 - **Per-server + per-channel config** — `~/Library/Application Support/Brygga/servers.json` via `ServerStore`. Fields: host, port, TLS, nickname, SASL creds, client-cert path + passphrase, auto-join list, open queries, ignore list, notify list, perform commands, pinned channels. Every field is decoded with `decodeIfPresent` for forward/backward compatibility.
 - **Scrollback** — JSONL at `~/Library/Application Support/Brygga/scrollback/<serverId>/<target>.log`. Rehydrated on launch; up to 500 most-recent lines per channel.
-- **Plain-text disk logs** — opt-out (default on). `~/Documents/Brygga Logs/<network>/<channel>.log`, timestamped human-readable lines.
+- **Plain-text disk logs** — opt-out (default on). `~/Library/Logs/Brygga/<network>/<channel>.log`, timestamped human-readable lines. First launch of 0.1.1+ auto-migrates logs from the pre-0.1.1 `~/Documents/Brygga Logs/` location.
 
 ### Preferences
 

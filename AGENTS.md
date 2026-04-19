@@ -61,7 +61,7 @@ ignoreList, notifyList, performCommands, pinnedChannels
 
 Other on-disk state:
 - **Scrollback JSONL** — `~/Library/Application Support/Brygga/scrollback/<serverId>/<sanitizedTarget>.log`. Owned by `ScrollbackStore` actor. Written on every `record(_:in:)` / `recordServer(_:)`; read back at launch by `AppState.restoreFromStore()`.
-- **Plain-text disk logs** — opt-out, `~/Documents/Brygga Logs/<network>/<channel>.log`. Owned by `DiskLogger` actor. Gated by `PreferencesKeys.diskLoggingEnabled` (default `true` — read via `UserDefaults.standard.object(forKey:) as? Bool ?? true`).
+- **Plain-text disk logs** — opt-out, `~/Library/Logs/Brygga/<network>/<channel>.log` (canonical macOS app-log path). Owned by `DiskLogger` actor, which runs a one-time migration from the pre-0.1.1 `~/Documents/Brygga Logs/` on first construction. Gated by `PreferencesKeys.diskLoggingEnabled` (default `true` — read via `UserDefaults.standard.object(forKey:) as? Bool ?? true`).
 - **Preferences** — `UserDefaults` under keys defined in `PreferencesKeys`.
 
 ### Scrollback-restore invariant (agents keep tripping on this)

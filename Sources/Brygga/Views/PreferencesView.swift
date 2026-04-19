@@ -237,9 +237,11 @@ struct LoggingPane: View {
 	@AppStorage(PreferencesKeys.diskLoggingEnabled) private var diskLoggingEnabled = true
 
 	private var logFolder: URL {
-		let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
-		return docs.appendingPathComponent("Brygga Logs", isDirectory: true)
+		let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
+			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library")
+		return library
+			.appendingPathComponent("Logs", isDirectory: true)
+			.appendingPathComponent("Brygga", isDirectory: true)
 	}
 
 	var body: some View {
@@ -267,7 +269,7 @@ struct LoggingPane: View {
 					}
 				}
 			} footer: {
-				Text("Logs land under Brygga Logs/<network>/<channel>.log. Each line is timestamped and human-readable.")
+				Text("Logs land under ~/Library/Logs/Brygga/<network>/<channel>.log — the canonical macOS app-log path (visible in Console.app, not synced by iCloud). Each line is timestamped and human-readable.")
 					.font(.caption)
 					.foregroundStyle(.secondary)
 			}
