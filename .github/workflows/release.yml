@@ -99,6 +99,12 @@ jobs:
 
             1. Download the DMG, open it, drag **Brygga.app** to `/Applications`.
             2. First launch: macOS will say the app can't be verified. Right-click (or Ctrl-click) → **Open** → confirm. This is because the binary is ad-hoc signed, not Developer-ID signed.
-            3. Requires **macOS 15 Sequoia or later, Apple Silicon only**.
+            3. If Gatekeeper still refuses (e.g. *"Apple could not verify Brygga is free of malware"* with no **Open** override), strip the quarantine attribute from the installed bundle and try again:
+
+               ```sh
+               xattr -cr /Applications/Brygga.app
+               ```
+
+            4. Requires **macOS 15 Sequoia or later, Apple Silicon only**.
 
             Commit: `${{ github.sha }}`

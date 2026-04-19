@@ -15,6 +15,12 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 
 The rolling **[latest release](https://github.com/buggerman/Brygga/releases/tag/latest)** is rebuilt automatically on every push to `main`. Grab the `.dmg`, drag **Brygga.app** to `/Applications`, then right-click → **Open** on first launch (the binary is ad-hoc signed, not Developer-ID notarized).
 
+If Gatekeeper refuses to open it even after right-click → Open (e.g. *"Apple could not verify Brygga is free of malware"*), strip the quarantine attribute once and retry:
+
+```sh
+xattr -cr /Applications/Brygga.app
+```
+
 ## Building
 
 ```sh
