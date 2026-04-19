@@ -727,6 +727,7 @@ struct ChannelListSheet: View {
 
 // MARK: - User list
 
+@MainActor
 struct UserListView: View {
 	@Environment(AppState.self) private var appState
 
@@ -742,10 +743,68 @@ struct UserListView: View {
 						.font(.system(.body, design: .monospaced))
 						.foregroundStyle(NickColor.color(for: user.nickname))
 				}
+				.contextMenu {
+					userRowMenu(for: user.nickname, channelName: channel.name)
+				}
 			}
 		} else {
 			ContentUnavailableView("No Users", systemImage: "person.2")
 		}
+	}
+
+	@ViewBuilder
+	private func userRowMenu(for nick: String, channelName: String) -> some View {
+		Button("Whois") { whois(nick) }
+		Button("Query") { query(nick) }
+		Divider()
+		Menu("Channel mode") {
+			Button("Op")       { setMode(channelName, "+o", nick) }
+			Button("Deop")     { setMode(channelName, "-o", nick) }
+			Button("Voice")    { setMode(channelName, "+v", nick) }
+			Button("Devoice")  { setMode(channelName, "-v", nick) }
+		}
+		Divider()
+		Button("Kick", role: .destructive) { kick(channelName, nick) }
+		Button("Kick and Ban", role: .destructive) { kickBan(channelName, nick) }
+		Divider()
+		Button("Ignore") { ignore(nick) }
+	}
+
+	// MARK: - Actions
+
+	private func whois(_ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		Task { try? await session.connection.send("WHOIS \(nick)") }
+	}
+
+	private func query(_ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		let channel = session.openQuery(nick)
+		appState.selection = channel.id
+	}
+
+	private func setMode(_ channelName: String, _ modeChange: String, _ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		Task { try? await session.connection.send("MODE \(channelName) \(modeChange) \(nick)") }
+	}
+
+	private func kick(_ channelName: String, _ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		Task { try? await session.connection.send("KICK \(channelName) \(nick)") }
+	}
+
+	private func kickBan(_ channelName: String, _ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		Task {
+			try? await session.connection.send("MODE \(channelName) +b \(nick)!*@*")
+			try? await session.connection.send("KICK \(channelName) \(nick)")
+		}
+	}
+
+	private func ignore(_ nick: String) {
+		guard let session = appState.selectedSession else { return }
+		session.addIgnore(nick)
+		session.recordServer(Message(sender: "*", content: "ignoring \(nick)", kind: .server))
 	}
 }
 
