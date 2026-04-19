@@ -26,6 +26,10 @@ public final class Channel: Identifiable {
 	/// MessageList uses this to render a "new" divider above the first
 	/// unread message when the user returns. Transient — not persisted.
 	public var lastReadMessageID: UUID?
+	/// Nickname → expiry timestamp. A user appears in the typing indicator
+	/// until `Date.now > expiry`. Updated from incoming TAGMSG `+typing`
+	/// client tags; transient — not persisted.
+	public var typingUsers: [String: Date] = [:]
 
 	public init(name: String) {
 		self.id = UUID().uuidString

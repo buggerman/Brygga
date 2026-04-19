@@ -100,6 +100,36 @@ final class IRCSessionTests: XCTestCase {
 		XCTAssertEqual(channel.messages.last?.kind, .action)
 	}
 
+	// MARK: - TAGMSG +typing
+
+	func testTagmsgActiveAddsTypingUser() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse("@+typing=active :alice!~a@h TAGMSG #test"))
+
+		let channel = session.server.channels[0]
+		let expiry = channel.typingUsers["alice"]
+		XCTAssertNotNil(expiry)
+		XCTAssertGreaterThan(expiry!, Date())
+	}
+
+	func testTagmsgDoneClearsTypingUser() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse("@+typing=active :alice!~a@h TAGMSG #test"))
+		session.handle(parse("@+typing=done :alice!~a@h TAGMSG #test"))
+
+		XCTAssertNil(session.server.channels[0].typingUsers["alice"])
+	}
+
+	func testTagmsgFromSelfIsIgnored() {
+		let session = makeSession(ownNick: "me")
+		session.handle(parse(":me!~me@host JOIN #test"))
+		session.handle(parse("@+typing=active :me!~me@host TAGMSG #test"))
+
+		XCTAssertTrue(session.server.channels[0].typingUsers.isEmpty)
+	}
+
 	func testPrivateMessageCreatesQueryChannel() {
 		let session = makeSession(ownNick: "me")
 		session.handle(parse(":alice!~a@h PRIVMSG me :hi there"))

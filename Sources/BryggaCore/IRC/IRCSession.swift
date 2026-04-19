@@ -131,6 +131,14 @@ public final class IRCSession {
 		}
 	}
 
+	/// Sends an IRCv3 typing indicator (`+typing=active|paused|done`) to the
+	/// given target. Silently drops if the server hasn't negotiated
+	/// `message-tags` — the TAGMSG is still a valid IRC command but the
+	/// server is free to reject unknown tags.
+	public func sendTyping(state: String, to target: String) async throws {
+		try await connection.send("@+typing=\(state) TAGMSG \(target)")
+	}
+
 	public func sendMessage(to target: String, content: String) async throws {
 		for chunk in splitMessage(content, for: target) {
 			try await connection.send("PRIVMSG \(target) :\(chunk)")
@@ -256,6 +264,7 @@ public final class IRCSession {
 
 		switch message.command {
 		case "PRIVMSG": handlePrivmsg(message)
+		case "TAGMSG":  handleTagmsg(message)
 		case "NOTICE":  handleNotice(message)
 		case "JOIN":    handleJoin(message)
 		case "PART":    handlePart(message)
@@ -980,6 +989,34 @@ public final class IRCSession {
 			}
 		}
 		return false
+	}
+
+	/// Handles an incoming TAGMSG carrying an IRCv3 `+typing` client tag.
+	/// `active` keeps the sender visible in the indicator for 6s; `paused`
+	/// and `done` clear them immediately.
+	private func handleTagmsg(_ message: IRCLineParserResult) {
+		guard let target = message.params.first,
+		      let typing = message.tags["+typing"],
+		      let nick = message.senderNickname,
+		      !isOwnMessage(nick) else { return }
+
+		let channelName: String
+		if target.hasPrefix("#") || target.hasPrefix("&") {
+			channelName = target
+		} else {
+			// TAGMSG to our own nick → treat as a query and attribute to the sender.
+			channelName = nick
+		}
+		guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
+
+		switch typing {
+		case "active":
+			channel.typingUsers[nick] = Date().addingTimeInterval(6)
+		case "paused", "done":
+			channel.typingUsers.removeValue(forKey: nick)
+		default:
+			break
+		}
 	}
 
 	private func handleNotice(_ message: IRCLineParserResult) {

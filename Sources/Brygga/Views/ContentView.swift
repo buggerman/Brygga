@@ -189,6 +189,44 @@ struct ChannelRow: View {
 	}
 }
 
+// MARK: - Typing indicator
+
+/// Thin status row above the InputBar that renders who's currently typing in
+/// the channel, based on IRCv3 `+typing` TAGMSG events. Uses a `TimelineView`
+/// so the row disappears automatically when every typing entry's `expiry`
+/// passes, without needing a separate cleanup Task on `Channel.typingUsers`.
+struct TypingIndicatorView: View {
+	let channel: Channel
+
+	var body: some View {
+		TimelineView(.periodic(from: .now, by: 1)) { timeline in
+			let active = channel.typingUsers
+				.filter { $0.value > timeline.date }
+				.map(\.key)
+				.sorted()
+			if !active.isEmpty {
+				HStack {
+					Text(message(for: active))
+						.font(.system(size: 11))
+						.foregroundStyle(.secondary)
+						.italic()
+					Spacer()
+				}
+				.padding(.horizontal, 12)
+				.padding(.vertical, 3)
+			}
+		}
+	}
+
+	private func message(for names: [String]) -> String {
+		switch names.count {
+		case 1:  return "\(names[0]) is typing\u{2026}"
+		case 2:  return "\(names[0]) and \(names[1]) are typing\u{2026}"
+		default: return "Several people are typing\u{2026}"
+		}
+	}
+}
+
 // MARK: - Chat
 
 @MainActor
@@ -215,11 +253,13 @@ struct ChatView: View {
 					Divider()
 				}
 				MessageList(channel: channel, findQuery: isFinding ? findQuery : "")
+				TypingIndicatorView(channel: channel)
 				Divider()
 				InputBar(
 					nickname: appState.selectedServer?.nickname ?? "",
 					draft: $draft,
-					suggestions: channel.users.map { $0.nickname }
+					suggestions: channel.users.map { $0.nickname },
+					onTyping: { state in sendTyping(state, in: channel) }
 				) {
 					submit(channel: channel)
 				}
@@ -289,6 +329,11 @@ struct ChatView: View {
 	private func detach() {
 		guard let channel = appState.selectedChannel else { return }
 		openWindow(id: "channel", value: channel.id)
+	}
+
+	private func sendTyping(_ state: String, in channel: Channel) {
+		guard let session = appState.selectedSession else { return }
+		Task { try? await session.sendTyping(state: state, to: channel.name) }
 	}
 
 	private func submit(channel: Channel) {
@@ -829,6 +874,10 @@ struct InputBar: View {
 	@Binding var draft: String
 	var placeholder: String = "Message"
 	var suggestions: [String] = []
+	/// Invoked with `"active"` (throttled to once per 3 seconds while the
+	/// draft is non-empty) and `"done"` (on submit or when the draft goes
+	/// back to empty). `nil` disables typing notifications entirely.
+	var onTyping: ((String) -> Void)? = nil
 	let onSubmit: () -> Void
 
 	// Completion cycle state.
@@ -841,6 +890,10 @@ struct InputBar: View {
 	@State private var history: [String] = []
 	@State private var historyIndex: Int? = nil
 	@State private var draftBeforeHistory: String = ""
+
+	// Typing-indicator throttle.
+	@State private var lastTypingSent: Date = .distantPast
+	@State private var lastTypingState: String = "done"
 
 	var body: some View {
 		HStack(spacing: 6) {
@@ -869,11 +922,15 @@ struct InputBar: View {
 				}
 				.onChange(of: draft) { _, _ in
 					// Any external edit resets completion cycle.
-					if completionPrefix.isEmpty { return }
+					if completionPrefix.isEmpty {
+						emitTypingForDraftChange()
+						return
+					}
 					if !draft.hasSuffix(completionMatches.indices.contains(completionIndex)
 						? completionMatches[completionIndex] : "") {
 						resetCompletion()
 					}
+					emitTypingForDraftChange()
 				}
 		}
 		.padding(.horizontal, 12)
@@ -888,7 +945,30 @@ struct InputBar: View {
 		}
 		historyIndex = nil
 		resetCompletion()
+		if lastTypingState != "done" {
+			onTyping?("done")
+			lastTypingState = "done"
+		}
 		onSubmit()
+	}
+
+	/// Throttled typing-indicator emitter. `active` once per 3 seconds while
+	/// the draft is non-empty; `done` as soon as the draft is emptied.
+	private func emitTypingForDraftChange() {
+		guard onTyping != nil else { return }
+		if draft.isEmpty {
+			if lastTypingState != "done" {
+				onTyping?("done")
+				lastTypingState = "done"
+			}
+			return
+		}
+		let now = Date()
+		if lastTypingState != "active" || now.timeIntervalSince(lastTypingSent) > 3 {
+			onTyping?("active")
+			lastTypingState = "active"
+			lastTypingSent = now
+		}
 	}
 
 	// MARK: - Tab completion
@@ -1250,11 +1330,15 @@ struct DetachedChannelView: View {
 				TopicBar(channel: channel)
 				Divider()
 				MessageList(channel: channel)
+				TypingIndicatorView(channel: channel)
 				Divider()
 				InputBar(
 					nickname: session.server.nickname,
 					draft: $draft,
-					suggestions: channel.users.map(\.nickname)
+					suggestions: channel.users.map(\.nickname),
+					onTyping: { state in
+						Task { try? await session.sendTyping(state: state, to: channel.name) }
+					}
 				) {
 					submit(channel: channel, session: session)
 				}

@@ -249,6 +249,7 @@ public actor IRCConnection {
 		"batch",
 		"chathistory",
 		"draft/chathistory",
+		"message-tags",
 	]
 
 	public private(set) var enabledCaps: Set<String> = []
