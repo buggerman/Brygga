@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create the GitHub Release
+
+jobs:
+  release:
+    name: Build, sign, package, release
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Strip leading 'v' from v1.2.3 -> 1.2.3
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: swift test
+
+      - name: Build release .app
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./Scripts/build-app.sh release
+
+      - name: Ad-hoc codesign
+        run: |
+          # Sign with nothing ("-") so GateKeeper sees a consistent identity.
+          # Users still see a "can't verify developer" prompt on first launch;
+          # right-click → Open bypasses it. Proper Developer-ID notarization
+          # needs a paid Apple account and is deliberately out of scope.
+          codesign --force --deep --sign - build/Brygga.app
+          codesign --verify --verbose build/Brygga.app
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist
+          DMG="dist/Brygga-${{ steps.version.outputs.tag }}.dmg"
+          hdiutil create \
+            -volname "Brygga ${{ steps.version.outputs.version }}" \
+            -srcfolder build/Brygga.app \
+            -ov -format UDZO \
+            "$DMG"
+          ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Brygga ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: dist/Brygga-*.dmg
+          body: |
+            ## Installation
+
+            1. Download the DMG, open it, drag **Brygga.app** to `/Applications`.
+            2. First launch: macOS will say the app can't be verified. Right-click (or Ctrl-click) → **Open** → confirm. This is because the binary is ad-hoc signed, not Developer-ID signed.
+            3. Requires **macOS 26 or later, Apple Silicon only**.
+
+            See [CHANGELOG / commits](https://github.com/buggerman/Brygga/commits/${{ steps.version.outputs.tag }}) for what's new.
