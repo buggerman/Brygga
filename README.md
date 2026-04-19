@@ -35,48 +35,31 @@ A raw `swift run Brygga` launches the binary as a background process — it will
 
 ## Current capabilities
 
-- TLS connection to IRC servers (Network.framework, TLS by default on 6697)
-- RFC 1459 + IRCv3 message-tag parsing
-- Two-column layout with an inspector user list for channels
-- Server console with raw incoming/outgoing logging
-- Channel join/part/kick, topic display, user list with mode prefixes
-- Private messages (query tabs), auto-opened on incoming or `/msg`
-- Slash commands: `/join`, `/part`, `/nick`, `/me`, `/msg`, `/query`, and raw
-- Persistence across launches: servers, joined channels, open queries
-- Clean `QUIT` on app termination
+Brygga already covers everything a mIRC daily-driver expects, minus DCC and the mIRC scripting language. A non-exhaustive summary:
+
+- TLS-by-default on 6697 via Network.framework, auto-reconnect with exponential backoff, outbound flood protection
+- SASL **EXTERNAL** (TLS client certificate), **SCRAM-SHA-256** (RFC 7677), or **PLAIN** — auto-selected based on what the server advertises
+- IRCv3 caps: `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag` / `account-notify`, `away-notify`, `invite-notify`, `batch`, `chathistory` / `draft/chathistory`, `message-tags`
+- Slash commands: `/join`, `/part`, `/nick`, `/me`, `/msg`, `/query`, `/topic`, `/whois`, `/away`, `/invite`, `/ignore`, `/notify`, `/list`, `/perform`, plus raw fallthrough
+- Two-column `NavigationSplitView` with auto-hiding user-list inspector, detachable channel windows (`Cmd+Shift+D`), pinned favorites (`Cmd+1…9`), in-buffer find (`Cmd+F`), cross-channel find (`Cmd+Shift+F`), tab nick completion, emoji autocomplete (`:smile:` → 😄)
+- IRCv3 typing indicator (`+typing` TAGMSG), inline OG / image link previews, mIRC control-code rendering, stable per-nick colors, highlight notifications with Dock badge, per-channel line marker
+- Preferences: show-joins/parts, auto-join-on-invite, link-previews, identity defaults, timestamp format, colorize nicknames, highlight keywords, ignore list, disk logging, saved servers
+- Persistence: servers + channels + preferences in `~/Library/Application Support/Brygga`, scrollback as JSONL, opt-in plain-text logs under `~/Documents/Brygga Logs`
+
+Full list and what's still on the backlog lives in [docs/PARITY.md](docs/PARITY.md).
 
 ## Roadmap
 
-The roadmap is directional, not a commitment. Scope and order will shift as the client gets used.
+The remaining polish items, in the order we'd tackle them next — directional, not a commitment:
 
-### Near term — stabilize the daily-driver loop
-
-- Reconnect on socket drop, with backoff
-- SASL PLAIN + NickServ identification
-- Preferences window (servers, identity, appearance)
-- Highlight detection and macOS notifications, Dock badge
-- Scrollback persistence and disk logging
-- Nick completion (Tab) and input history (↑/↓)
-- `/list` channel browser
-
-### Medium term — polish and protocol depth
-
-- Detachable tabs (`Cmd+Shift+D` moves a channel to its own window)
-- IRCv3 capability negotiation: `message-tags`, `server-time`, `account-tag`, `echo-message`, `batch`
-- Themeable message rendering
-- Away / idle state, channel modes UI
-- CTCP responses (VERSION, TIME, PING)
-
-### Longer term — stretch
-
-- `chathistory` and `message-redaction` IRCv3 extensions
-- Scripting or plugin surface
-- iCloud-synced server configuration
-- Unified mentions view across all servers
+1. Markdown-style input (`*bold*` → `^B`) as an optional toggle
+2. Keyboard shortcuts — `Cmd+K` switch channel, `Cmd+J` quick join, `Cmd+[` / `Cmd+]` prev/next channel
+3. Status bar — connection state, lag, server ping
+4. Liquid Glass tuning on chat surface, sidebar, and inspector
 
 ### Explicitly out of scope
 
-- DCC file transfer
+- DCC file transfer (see [PARITY.md](docs/PARITY.md) for the full "out of scope" list)
 - Objective-C or C interop — see [AGENTS.md](AGENTS.md)
 
 ## Architecture
