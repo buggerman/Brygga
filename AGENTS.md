@@ -8,11 +8,11 @@ Brygga is a native macOS IRC client written in pure Swift + SwiftUI. The goal is
 
 ## Platform targets
 
-- **Deployment floor:** macOS 15 Sequoia (Apple Silicon only).
+- **Deployment floor:** macOS 15 Sequoia. Official DMGs are Apple Silicon (arm64) only; Intel (x86_64) is source-compatible and users may build their own, but it's untested in CI.
 - **Build toolchain:** Xcode 26 / Swift 6.2, strict concurrency on.
 - **Policy:** use the newest API that solves the problem; do **not** add `@available` guards. If a new feature needs a newer OS, bump the deployment floor in `Package.swift` + `Scripts/build-app.sh` (`LSMinimumSystemVersion`) in one edit. Today's floor is macOS 15 because `.containerBackground(_:for: .window)` is 15+.
 - **Design direction:** Liquid Glass on macOS 26; everything in use falls back gracefully on 15 via standard materials.
-- No Intel builds. No pre-Sequoia fallbacks.
+- No prebuilt Intel binaries. No pre-Sequoia fallbacks.
 
 ## Layout
 

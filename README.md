@@ -7,7 +7,7 @@ Brygga is in early development. The core client works end-to-end (connect, join,
 ## Requirements
 
 - macOS 15 Sequoia or later (looks best on macOS 26 with Liquid Glass materials, but falls back gracefully to the standard `.bar` / `.thinMaterial` / `.regularMaterial` surfaces on earlier releases)
-- Apple Silicon only (arm64 — no Intel builds)
+- Apple Silicon (arm64) for the official DMGs. Intel (x86_64) is source-compatible but not shipped — see [Building for Intel Macs](#building-for-intel-macs) to compile your own.
 - Xcode 26 or later (for building from source)
 - Swift 6.0+
 
@@ -43,6 +43,34 @@ open build/Brygga.app
 ```
 
 A raw `swift run Brygga` launches the binary as a background process — it will not open a window. Always run the built `.app` bundle.
+
+### Building for Intel Macs
+
+Official DMGs are Apple Silicon only. The source has no Apple-Silicon-specific dependencies, so you can produce a working Intel (x86_64) binary yourself — there's just no prebuilt artifact shipped by the project. No CI coverage either, so it's best-effort.
+
+**Requirements:** macOS 15 Sequoia or later (Intel Macs still on macOS 15's compatibility list), Xcode 26 / Swift 6.2 toolchain.
+
+**On an Intel Mac** — the normal flow already targets x86_64:
+
+```sh
+swift build -c release
+./Scripts/build-app.sh release
+open build/Brygga.app
+```
+
+**Cross-compile from Apple Silicon** — override the host triple:
+
+```sh
+swift build -c release --triple x86_64-apple-macosx15.0
+# then build the .app around the cross-compiled binary manually:
+mkdir -p build/Brygga.app/Contents/MacOS build/Brygga.app/Contents/Resources
+cp .build/x86_64-apple-macosx/release/Brygga build/Brygga.app/Contents/MacOS/Brygga
+cp Resources/AppIcon.icns build/Brygga.app/Contents/Resources/AppIcon.icns
+# then copy an Info.plist from Scripts/build-app.sh's heredoc by hand,
+# or tweak build-app.sh to point at the x86_64 artifact path
+```
+
+We don't test Intel builds in CI, so if something breaks on x86_64 specifically, please open an issue with the full build output. Bugs will be fixed when reasonable; platform-specific workarounds won't be.
 
 ## Current capabilities
 
