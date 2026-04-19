@@ -1,9 +1,5 @@
-/* *********************************************************************
- *
- * Unit tests for the SCRAM-SHA-256 client. Uses the RFC 7677 example
- * exchange (username "user", password "pencil") as a known test vector.
- *
- *********************************************************************** */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Brygga contributors
 
 import XCTest
 @testable import BryggaCore

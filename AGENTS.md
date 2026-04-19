@@ -89,7 +89,14 @@ Other on-disk state:
 ## Code style
 
 - Tabs for indentation (match existing files).
-- BSD 3-Clause header on every `.swift` file — copy from any existing file.
+- SPDX header on every `.swift` file — two lines, no block comment:
+
+  ```swift
+  // SPDX-License-Identifier: BSD-3-Clause
+  // Copyright (c) 2026 Brygga contributors
+  ```
+
+  Full license text lives in `LICENSE.md` at repo root. Do not reintroduce the old BSD-prose banner.
 - Prefer `@Observable` over `ObservableObject`. Prefer `async`/`await` over completion handlers; bridge with `withCheckedThrowingContinuation` at the Network.framework boundary.
 - No force-unwrap outside tests or clearly invariant cases. No `try!` in production code. No `fatalError` except for compile-time-impossible states.
 - Doc comments (`///`) on every `public` symbol.

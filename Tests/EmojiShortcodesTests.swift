@@ -1,8 +1,5 @@
-/* *********************************************************************
- *
- * Unit tests for the emoji-shortcode auto-completion helper.
- *
- *********************************************************************** */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Brygga contributors
 
 import XCTest
 @testable import BryggaCore

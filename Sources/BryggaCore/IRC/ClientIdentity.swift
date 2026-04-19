@@ -1,8 +1,5 @@
-/* *********************************************************************
- *  Brygga — A modern IRC client for macOS
- *  Copyright (c) 2026 Brygga contributors
- *  BSD 3-Clause License
- *********************************************************************** */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Brygga contributors
 
 import Foundation
 import Security

@@ -1,8 +1,5 @@
-/* *********************************************************************
- *
- * Unit tests for the Swift IRC line parser (IRCLineParser).
- *
- *********************************************************************** */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Brygga contributors
 
 import XCTest
 @testable import BryggaCore

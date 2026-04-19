@@ -1,8 +1,5 @@
-/* *********************************************************************
- *
- * Unit tests for AppState sidebar navigation (Cmd+[ / Cmd+] wrap-around).
- *
- *********************************************************************** */
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Brygga contributors
 
 import XCTest
 @testable import BryggaCore
