@@ -14,4 +14,14 @@ public enum PreferencesKeys {
 	public static let highlightKeywordsRaw = "brygga.highlightKeywordsRaw"
 	public static let autoJoinOnInvite = "brygga.autoJoinOnInvite"
 	public static let diskLoggingEnabled = "brygga.diskLoggingEnabled"
+
+	// Identity defaults, pre-filling the Connect sheet.
+	public static let defaultNickname = "brygga.defaultNickname"
+	public static let defaultUserName = "brygga.defaultUserName"
+	public static let defaultRealName = "brygga.defaultRealName"
+
+	// Appearance.
+	/// "system" | "12h" | "24h"
+	public static let timestampFormat = "brygga.timestampFormat"
+	public static let nickColorsEnabled = "brygga.nickColorsEnabled"
 }

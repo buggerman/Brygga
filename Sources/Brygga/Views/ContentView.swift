@@ -684,10 +684,34 @@ struct LineMarker: View {
 
 struct MessageRow: View {
 	let message: Message
+	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
+	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
+
+	private func senderColor(_ nick: String) -> Color {
+		nickColorsEnabled ? NickColor.color(for: nick) : Color.accentColor
+	}
+
+	private var timestampText: String {
+		let date = message.timestamp
+		switch timestampFormat {
+		case "12h":
+			let f = DateFormatter()
+			f.dateFormat = "h:mm a"
+			f.locale = Locale(identifier: "en_US_POSIX")
+			return f.string(from: date)
+		case "24h":
+			let f = DateFormatter()
+			f.dateFormat = "HH:mm"
+			f.locale = Locale(identifier: "en_US_POSIX")
+			return f.string(from: date)
+		default:
+			return date.formatted(date: .omitted, time: .shortened)
+		}
+	}
 
 	private var actionAttributedString: AttributedString {
 		var sender = AttributedString(message.sender + " ")
-		sender.foregroundColor = NickColor.color(for: message.sender)
+		sender.foregroundColor = senderColor(message.sender)
 		var composed = sender
 		composed.append(AttributedString.fromIRC(message.content))
 		return composed
@@ -714,7 +738,7 @@ struct MessageRow: View {
 	@ViewBuilder
 	private var rowBody: some View {
 		HStack(alignment: .top, spacing: 8) {
-			Text(message.timestamp.formatted(date: .omitted, time: .shortened))
+			Text(timestampText)
 				.font(.system(.caption, design: .monospaced))
 				.foregroundStyle(.secondary)
 				.frame(width: 52, alignment: .trailing)
@@ -723,7 +747,7 @@ struct MessageRow: View {
 			case .privmsg:
 				Text(message.sender)
 					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(NickColor.color(for: message.sender))
+					.foregroundStyle(senderColor(message.sender))
 				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
 					.textSelection(.enabled)
@@ -974,6 +998,11 @@ struct ChannelListSheet: View {
 @MainActor
 struct UserListView: View {
 	@Environment(AppState.self) private var appState
+	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
+
+	private func color(for nick: String) -> Color {
+		nickColorsEnabled ? NickColor.color(for: nick) : .primary
+	}
 
 	var body: some View {
 		if let channel = appState.selectedChannel, !channel.users.isEmpty {
@@ -985,7 +1014,7 @@ struct UserListView: View {
 						.frame(width: 10, alignment: .leading)
 					Text(user.nickname)
 						.font(.system(.body, design: .monospaced))
-						.foregroundStyle(NickColor.color(for: user.nickname))
+						.foregroundStyle(color(for: user.nickname))
 				}
 				.contextMenu {
 					userRowMenu(for: user.nickname, channelName: channel.name)

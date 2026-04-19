@@ -60,6 +60,7 @@ struct BryggaApp: App {
 
 		Settings {
 			PreferencesView()
+				.environment(appState)
 		}
 	}
 }

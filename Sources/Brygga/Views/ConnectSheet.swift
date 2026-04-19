@@ -15,10 +15,17 @@ struct ConnectSheet: View {
 	@State private var name: String = ""
 	@State private var host: String = "irc.libera.chat"
 	@State private var portText: String = "6697"
-	@State private var nickname: String = NSUserName()
+	@State private var nickname: String = Self.initialNickname()
 	@State private var useTLS: Bool = true
 	@State private var saslAccount: String = ""
 	@State private var saslPassword: String = ""
+
+	/// Picks the default nickname from preferences, falling back to the macOS
+	/// user short name when the pref is blank.
+	private static func initialNickname() -> String {
+		let stored = UserDefaults.standard.string(forKey: PreferencesKeys.defaultNickname) ?? ""
+		return stored.isEmpty ? NSUserName() : stored
+	}
 
 	private var port: UInt16? { UInt16(portText) }
 
