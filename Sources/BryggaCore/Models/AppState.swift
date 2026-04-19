@@ -129,7 +129,12 @@ public final class AppState {
 		defer { isRestoring = false }
 
 		for config in snapshot.servers {
+			// Pass `id` through so the Server keeps the stable UUID stored
+			// in `servers.json`. Without this, every launch mints a new
+			// UUID, orphans the scrollback directory on disk, and the
+			// user sees an empty buffer.
 			let server = addServer(
+				id: config.id,
 				name: config.name,
 				host: config.host,
 				port: config.port,
