@@ -44,18 +44,34 @@ struct BryggaApp: App {
 				.onAppear { appDelegate.appState = appState }
 		}
 		.windowStyle(.titleBar)
+		.defaultSize(width: 1200, height: 780)
 		.commands {
 			CommandMenu("Server") {
-				Button("New Server\u{2026}") { }
+				Button("New Server\u{2026}") { appState.showingConnectSheet = true }
 					.keyboardShortcut("n", modifiers: [.command, .shift])
-				Button("Connect") { }
-				Button("Disconnect") { }
+				Button("Connect") {
+					if let id = appState.selectedServer?.id {
+						appState.reconnectServer(id: id)
+					}
+				}
+				.disabled(appState.selectedServer == nil)
+				Button("Disconnect") {
+					if let id = appState.selectedServer?.id {
+						Task { await appState.disconnectServer(id: id) }
+					}
+				}
+				.disabled(appState.selectedServer == nil)
 			}
 			CommandMenu("Channel") {
 				Button("Join Channel\u{2026}") { appState.showingQuickJoin = true }
 					.keyboardShortcut("j", modifiers: [.command])
-				Button("Leave Channel") { }
-					.keyboardShortcut("w", modifiers: [.command])
+				Button("Leave Channel") {
+					guard let channel = appState.selectedChannel,
+					      let session = appState.selectedSession else { return }
+					Task { try? await session.part(channel.name) }
+				}
+				.keyboardShortcut("w", modifiers: [.command])
+				.disabled(appState.selectedChannel == nil)
 				Divider()
 				Button("Switch Channel\u{2026}") { appState.showingQuickSwitcher = true }
 					.keyboardShortcut("k", modifiers: [.command])

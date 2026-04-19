@@ -19,14 +19,14 @@ struct ContentView: View {
 				SidebarView()
 					.navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
 			} detail: {
-				ChatView()
-					.inspector(isPresented: Binding(
-						get: { shouldShowUserList },
-						set: { _ in }
-					)) {
+				HStack(spacing: 0) {
+					ChatView()
+					if shouldShowUserList {
+						Divider()
 						UserListView()
-							.inspectorColumnWidth(min: 160, ideal: 200, max: 300)
+							.frame(minWidth: 160, idealWidth: 200, maxWidth: 260)
 					}
+				}
 			}
 			.navigationSplitViewStyle(.balanced)
 			Divider()
@@ -113,15 +113,17 @@ struct SidebarView: View {
 								}
 							}
 
-						ForEach(server.channels) { channel in
-							ChannelRow(channel: channel)
-								.tag(Optional(channel.id))
-								.padding(.leading, 12)
-								.contextMenu {
-									Button(channel.isPinned ? "Unpin" : "Pin to Favorites") {
-										appState.togglePin(channelID: channel.id)
+						if server.isExpanded {
+							ForEach(server.channels) { channel in
+								ChannelRow(channel: channel)
+									.tag(Optional(channel.id))
+									.padding(.leading, 12)
+									.contextMenu {
+										Button(channel.isPinned ? "Unpin" : "Pin to Favorites") {
+											appState.togglePin(channelID: channel.id)
+										}
 									}
-								}
+							}
 						}
 					}
 				}
@@ -140,10 +142,21 @@ struct SidebarView: View {
 }
 
 struct ServerRow: View {
-	let server: Server
+	@Bindable var server: Server
 
 	var body: some View {
 		HStack(spacing: 6) {
+			Button {
+				server.isExpanded.toggle()
+			} label: {
+				Image(systemName: server.isExpanded ? "chevron.down" : "chevron.right")
+					.font(.system(size: 9, weight: .semibold))
+					.foregroundStyle(.secondary)
+					.frame(width: 12)
+					.contentShape(Rectangle())
+			}
+			.buttonStyle(.plain)
+
 			Circle()
 				.fill(stateColor)
 				.frame(width: 8, height: 8)
@@ -154,6 +167,7 @@ struct ServerRow: View {
 					.font(.system(size: 9))
 					.foregroundStyle(.secondary)
 			}
+			Spacer(minLength: 0)
 		}
 	}
 
