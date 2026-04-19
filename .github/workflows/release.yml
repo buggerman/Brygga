@@ -68,13 +68,62 @@ jobs:
 
       - name: Create DMG
         run: |
+          set -euo pipefail
           mkdir -p dist
-          DMG="dist/Brygga-${{ steps.params.outputs.tag }}.dmg"
+          STAGING="$(mktemp -d)/dmg-staging"
+          mkdir -p "$STAGING"
+
+          # Layout: Brygga.app on the left, Applications shortcut on the right.
+          # The symlink is what gives users the familiar drag-to-install UX.
+          cp -a build/Brygga.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+
+          VOLNAME="Brygga ${{ steps.params.outputs.version }}"
+          TMP_DMG="dist/Brygga-tmp.dmg"
+          FINAL_DMG="dist/Brygga-${{ steps.params.outputs.tag }}.dmg"
+
+          # 1) Build a writable UDRW image so we can arrange icons in-place.
           hdiutil create \
-            -volname "Brygga ${{ steps.params.outputs.version }}" \
-            -srcfolder build/Brygga.app \
-            -ov -format UDZO \
-            "$DMG"
+            -volname "$VOLNAME" \
+            -srcfolder "$STAGING" \
+            -ov -format UDRW \
+            "$TMP_DMG"
+
+          # 2) Mount, try to set window size + icon positions via Finder,
+          #    then detach. AppleScript can be flaky on headless runners;
+          #    if it fails the DMG is still perfectly usable (just without
+          #    the custom layout), so we swallow errors and move on.
+          MOUNT_DIR="/Volumes/$VOLNAME"
+          hdiutil attach -readwrite -noverify -noautoopen "$TMP_DMG" >/dev/null
+
+          osascript <<EOF || echo "note: DMG layout AppleScript failed; shipping plain symlinked DMG"
+          tell application "Finder"
+              tell disk "$VOLNAME"
+                  open
+                  set current view of container window to icon view
+                  set toolbar visible of container window to false
+                  set statusbar visible of container window to false
+                  set the bounds of container window to {200, 200, 720, 520}
+                  set viewOptions to the icon view options of container window
+                  set arrangement of viewOptions to not arranged
+                  set icon size of viewOptions to 96
+                  set position of item "Brygga.app" of container window to {140, 160}
+                  set position of item "Applications" of container window to {380, 160}
+                  close
+                  open
+                  update without registering applications
+                  delay 1
+              end tell
+          end tell
+          EOF
+
+          sync
+          hdiutil detach "$MOUNT_DIR" >/dev/null
+
+          # 3) Convert the writable DMG to the final compressed UDZO form.
+          hdiutil convert "$TMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$FINAL_DMG"
+          rm -f "$TMP_DMG"
+
           ls -la dist/
 
       - name: Replace rolling release (if applicable)
