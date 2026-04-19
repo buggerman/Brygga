@@ -161,13 +161,25 @@ struct ChannelRow: View {
 struct ChatView: View {
 	@Environment(AppState.self) private var appState
 	@State private var draft: String = ""
+	@State private var findQuery: String = ""
+	@State private var isFinding: Bool = false
+	@FocusState private var findFocused: Bool
 
 	var body: some View {
 		VStack(spacing: 0) {
 			if let channel = appState.selectedChannel {
 				TopicBar(channel: channel)
 				Divider()
-				MessageList(channel: channel)
+				if isFinding {
+					FindBar(
+						query: $findQuery,
+						matchCount: matchCount(in: channel),
+						onClose: closeFind
+					)
+					.focused($findFocused)
+					Divider()
+				}
+				MessageList(channel: channel, findQuery: isFinding ? findQuery : "")
 				Divider()
 				InputBar(
 					nickname: appState.selectedServer?.nickname ?? "",
@@ -210,6 +222,29 @@ struct ChatView: View {
 			}
 			appState.refreshDockBadge()
 		}
+		.background {
+			Button("Find") {
+				isFinding = true
+				findFocused = true
+			}
+			.keyboardShortcut("f", modifiers: .command)
+			.hidden()
+		}
+	}
+
+	private func matchCount(in channel: Channel) -> Int {
+		guard !findQuery.isEmpty else { return 0 }
+		let q = findQuery.lowercased()
+		return channel.messages.reduce(0) { acc, msg in
+			(msg.content.lowercased().contains(q) || msg.sender.lowercased().contains(q))
+				? acc + 1
+				: acc
+		}
+	}
+
+	private func closeFind() {
+		isFinding = false
+		findQuery = ""
 	}
 
 	private func submit(channel: Channel) {
@@ -476,16 +511,28 @@ struct TopicBar: View {
 
 struct MessageList: View {
 	let channel: Channel
+	var findQuery: String = ""
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
 
 	private var visibleMessages: [Message] {
-		if showJoinsParts { return channel.messages }
-		return channel.messages.filter { msg in
-			switch msg.kind {
-			case .join, .part, .quit, .nick: return false
-			default: return true
+		var messages: [Message]
+		if showJoinsParts {
+			messages = channel.messages
+		} else {
+			messages = channel.messages.filter { msg in
+				switch msg.kind {
+				case .join, .part, .quit, .nick: return false
+				default: return true
+				}
 			}
 		}
+		if !findQuery.isEmpty {
+			let q = findQuery.lowercased()
+			messages = messages.filter {
+				$0.content.lowercased().contains(q) || $0.sender.lowercased().contains(q)
+			}
+		}
+		return messages
 	}
 
 	private var markerIndex: Int? {
@@ -518,6 +565,38 @@ struct MessageList: View {
 				}
 			}
 		}
+	}
+}
+
+/// In-channel "Find" bar. Triggered by Cmd+F in `ChatView`.
+struct FindBar: View {
+	@Binding var query: String
+	let matchCount: Int
+	let onClose: () -> Void
+
+	var body: some View {
+		HStack(spacing: 8) {
+			Image(systemName: "magnifyingglass")
+				.foregroundStyle(.secondary)
+			TextField("Find in channel", text: $query)
+				.textFieldStyle(.plain)
+				.onExitCommand(perform: onClose)
+				.onSubmit(onClose)
+			if !query.isEmpty {
+				Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			Button(action: onClose) {
+				Image(systemName: "xmark.circle.fill")
+			}
+			.buttonStyle(.plain)
+			.foregroundStyle(.secondary)
+			.keyboardShortcut(.cancelAction)
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 6)
+		.background(.regularMaterial)
 	}
 }
 
