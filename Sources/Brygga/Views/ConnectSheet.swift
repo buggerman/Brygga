@@ -22,6 +22,10 @@ struct ConnectSheet: View {
 	@State private var certPath: String = ""
 	@State private var certPassphrase: String = ""
 
+	/// Network picker selection. `""` is the "Custom\u{2026}" sentinel;
+	/// any other value matches a `KnownNetwork.id`.
+	@State private var selectedNetworkID: String = "Libera.Chat"
+
 	/// Picks the default nickname from preferences, falling back to the macOS
 	/// user short name when the pref is blank.
 	private static func initialNickname() -> String {
@@ -50,12 +54,35 @@ struct ConnectSheet: View {
 
 			Form {
 				Section {
+					Picker("Network", selection: $selectedNetworkID) {
+						Text("Custom\u{2026}").tag("")
+						ForEach(KnownNetworks.all) { net in
+							Text(net.name).tag(net.id)
+						}
+					}
+					.onChange(of: selectedNetworkID) { _, newID in
+						applyNetwork(id: newID)
+					}
 					TextField("Name", text: $name, prompt: Text("Libera"))
 					TextField("Host", text: $host)
+						.onChange(of: host) { _, newHost in
+							// Host edits that don't match a known network
+							// flip the picker back to Custom.
+							let matched = KnownNetworks.network(withHost: newHost)?.id ?? ""
+							if matched != selectedNetworkID {
+								selectedNetworkID = matched
+							}
+						}
 					TextField("Port", text: $portText)
 						.monospaced()
 					TextField("Nickname", text: $nickname)
 					Toggle("Use TLS", isOn: $useTLS)
+				} footer: {
+					if let network = KnownNetworks.all.first(where: { $0.id == selectedNetworkID }) {
+						Text(network.summary)
+							.font(.caption)
+							.foregroundStyle(.secondary)
+					}
 				}
 				Section("SASL (optional)") {
 					TextField("Account", text: $saslAccount, prompt: Text("usually same as nickname"))
@@ -119,6 +146,21 @@ struct ConnectSheet: View {
 			clientCertificatePassphrase: effectiveCertPassphrase
 		)
 		dismiss()
+	}
+
+	/// Copy the selected network's defaults into the form fields. Preserves
+	/// the user-chosen `name` if they already typed one (since names are
+	/// purely for their own sidebar labelling). Empty id = Custom, no-op.
+	private func applyNetwork(id: String) {
+		guard let network = KnownNetworks.all.first(where: { $0.id == id }) else {
+			return
+		}
+		host = network.host
+		portText = String(network.port)
+		useTLS = network.useTLS
+		if name.trimmingCharacters(in: .whitespaces).isEmpty {
+			name = network.name
+		}
 	}
 
 	private func chooseCert() {

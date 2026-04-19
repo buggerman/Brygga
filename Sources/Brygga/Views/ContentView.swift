@@ -303,6 +303,14 @@ struct StatusBarView: View {
 
 			Spacer()
 
+			if let channel = appState.selectedChannel, !channel.isPrivateMessage {
+				let count = channel.users.count
+				Text("\(count) member\(count == 1 ? "" : "s")")
+					.foregroundStyle(.secondary)
+					.monospacedDigit()
+				Text("\u{00B7}")
+					.foregroundStyle(.tertiary)
+			}
 			Text("\(totalChannels) channel\(totalChannels == 1 ? "" : "s")")
 				.foregroundStyle(.secondary)
 		}
@@ -354,8 +362,6 @@ struct ChatView: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			if let channel = appState.selectedChannel {
-				TopicBar(channel: channel)
-				Divider()
 				if isFinding {
 					FindBar(
 						query: $findQuery,
@@ -378,8 +384,6 @@ struct ChatView: View {
 				}
 				.id(channel.id)
 			} else if let server = appState.selectedServer {
-				ServerConsoleHeader(server: server)
-				Divider()
 				ServerMessageList(server: server)
 				Divider()
 				InputBar(
@@ -397,6 +401,8 @@ struct ChatView: View {
 				}
 			}
 		}
+		.navigationTitle(navigationTitleText)
+		.navigationSubtitle(navigationSubtitleText)
 		.onChange(of: appState.selection) { oldValue, _ in
 			// Emit a final `done` typing indicator to the *departing* channel
 			// before the draft clears below — otherwise the `onChange(of: draft)`
@@ -472,6 +478,30 @@ struct ChatView: View {
 			return appState.sessions[server.id]
 		}
 		return nil
+	}
+
+	/// Title shown in the macOS window title bar (which replaces the old
+	/// in-view `TopicBar` / `ServerConsoleHeader` rows, reclaiming that
+	/// vertical space for chat content).
+	private var navigationTitleText: String {
+		if let channel = appState.selectedChannel { return channel.name }
+		if let server = appState.selectedServer { return server.name }
+		return "Brygga"
+	}
+
+	/// Window subtitle under the title. For channels → topic; for queries
+	/// → hint that it's a private message; for the server console → host.
+	private var navigationSubtitleText: String {
+		if let channel = appState.selectedChannel {
+			if channel.isPrivateMessage {
+				return "Private message"
+			}
+			return channel.topic
+		}
+		if let server = appState.selectedServer {
+			return server.host
+		}
+		return ""
 	}
 
 	private func submit(channel: Channel) {
@@ -1988,8 +2018,6 @@ struct DetachedChannelView: View {
 		if let channel = appState.channel(byID: channelID),
 		   let session = session(for: channel) {
 			VStack(spacing: 0) {
-				TopicBar(channel: channel)
-				Divider()
 				MessageList(channel: channel)
 				TypingIndicatorView(channel: channel)
 				Divider()
@@ -2005,6 +2033,7 @@ struct DetachedChannelView: View {
 				}
 			}
 			.navigationTitle(channel.name)
+			.navigationSubtitle(channel.isPrivateMessage ? "Private message" : channel.topic)
 		} else {
 			ContentUnavailableView {
 				Label("Channel not available", systemImage: "bubble.left")
