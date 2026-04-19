@@ -9,12 +9,13 @@ Phase 1 is effectively complete — everything a mIRC daily-driver expects (minu
 ### Connection and identity
 - TLS connect on 6697 via `NWConnection`
 - SASL PLAIN authentication during connection registration
-- IRCv3 CAP negotiation: `sasl`, `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag`, `account-notify`, `away-notify`, `invite-notify`, `batch`
+- IRCv3 CAP negotiation: `sasl`, `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag`, `account-notify`, `away-notify`, `invite-notify`, `batch`, `chathistory` / `draft/chathistory`
 - `server-time` tag used for message timestamps (accurate scrollback across reconnects)
 - `userhost-in-names` → populates `User.username` / `hostname` on NAMES
 - `chghost` → live host updates after services login
 - `account-notify` / `account-tag` → tracks services-auth state on users
 - `away-notify` → `User.isAway` + `awayMessage` updates without WHOIS
+- `chathistory` → on own-JOIN, requests `CHATHISTORY LATEST <channel> * 100` to fill missed backlog from the server; de-duped per session and reset on each 001 welcome
 - Clean `QUIT` on app termination
 - Auto-reconnect with exponential backoff
 - User-initiated disconnect that stays disconnected
@@ -54,6 +55,14 @@ Phase 1 is effectively complete — everything a mIRC daily-driver expects (minu
 - Preferences window (`Cmd+,`) — General pane (show joins/parts, auto-join-on-invite, disk logging) + Notifications pane (highlight keywords)
 - `/away` moon indicator on sidebar server row and console header
 
+### Distribution
+- GitHub Actions `release.yml` publishes a macOS `.dmg` on:
+  - **Every push to `main`** → rolling `latest` prerelease (tag deleted + recreated at the new commit, so friends can bookmark `releases/tag/latest` for always-current).
+  - **Tag push `v*`** → permanent, non-prerelease release at that tag for archival versions.
+- Pipeline: `swift test` → `Scripts/build-app.sh release` with `VERSION` / `BUILD_NUMBER` injected into `Info.plist` → ad-hoc codesign (`codesign --sign -`) → `hdiutil` UDZO DMG → `softprops/action-gh-release@v2`.
+- No paid Apple Developer cert. First launch needs right-click → Open (GateKeeper). Notarization is deliberately out of scope.
+- `ci.yml` runs `swift build` + `swift test` on every push/PR using the runner's default Xcode.
+
 ## Phase 1 — complete
 
 Phase 1 is done. The Preferences window now has seven panes:
@@ -72,14 +81,13 @@ Opened via `Cmd+,` like any macOS settings window. Inline-editing the Servers li
 
 These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "modern" label.
 
-1. **IRCv3 `chathistory`** — request server-side scrollback on channel open. Huge UX upgrade over "you weren't there, so you missed it".
-2. **IRCv3 typing indicator** for servers supporting the cap.
-3. **Inline link previews** — image / OG-title fetch for URLs (opt-in, off by default).
-4. **Find across all channels** (`Cmd+Shift+F`).
-5. **Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).
-6. **Favorites / pinned channels** in the sidebar.
-7. **SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.
-8. **SASL EXTERNAL** — client-certificate auth for networks that allow it.
+1. **IRCv3 typing indicator** for servers supporting the cap.
+2. **Inline link previews** — image / OG-title fetch for URLs (opt-in, off by default).
+3. **Find across all channels** (`Cmd+Shift+F`).
+4. **Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).
+5. **Favorites / pinned channels** in the sidebar.
+6. **SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.
+7. **SASL EXTERNAL** — client-certificate auth for networks that allow it.
 
 ## Phase 3 — Polish
 
@@ -110,13 +118,12 @@ Not building these, and not feeling bad about it:
 
 Phase 2 is up. Recommended path:
 
-1. **IRCv3 `chathistory`** (Phase 2 #1) — fills the "you missed it" gap and benefits from the CAP plumbing already in place.
-2. **Detachable tabs** (Phase 2 #5) — `Cmd+Shift+D` pops the selected channel into its own window.
-3. **Favorites / pinned channels** (Phase 2 #6) — sidebar ordering + keyboard-first navigation.
-4. **SASL SCRAM-SHA-256** (Phase 2 #7) — add after chathistory, before EXTERNAL.
-5. **IRCv3 typing indicator** (Phase 2 #2).
-6. **Find across all channels** (Phase 2 #4) — `Cmd+Shift+F`.
-7. **Inline link previews** (Phase 2 #3) — image / OG fetch, opt-in.
-8. **SASL EXTERNAL** (Phase 2 #8) — client-cert auth.
+1. **Detachable tabs** (Phase 2 #4) — `Cmd+Shift+D` pops the selected channel into its own window.
+2. **Favorites / pinned channels** (Phase 2 #5) — sidebar ordering + keyboard-first navigation.
+3. **SASL SCRAM-SHA-256** (Phase 2 #6) — stronger than PLAIN; Ergo supports it.
+4. **IRCv3 typing indicator** (Phase 2 #1).
+5. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
+6. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
+7. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
 
 Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.
