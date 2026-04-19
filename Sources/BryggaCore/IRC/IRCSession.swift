@@ -131,11 +131,98 @@ public final class IRCSession {
 	}
 
 	public func sendMessage(to target: String, content: String) async throws {
-		try await connection.send("PRIVMSG \(target) :\(content)")
+		for chunk in splitMessage(content, for: target) {
+			try await connection.send("PRIVMSG \(target) :\(chunk)")
+		}
 	}
 
 	public func sendAction(to target: String, action: String) async throws {
-		try await connection.send("PRIVMSG \(target) :\u{0001}ACTION \(action)\u{0001}")
+		// ACTION wraps add \u{0001}ACTION ... \u{0001} — 9 extra bytes.
+		let maxBytes = max(safeBodyLimit(for: target) - 9, 50)
+		for line in action.split(whereSeparator: \.isNewline).map(String.init) {
+			for chunk in chunkMessage(line, maxBytes: maxBytes) {
+				try await connection.send("PRIVMSG \(target) :\u{0001}ACTION \(chunk)\u{0001}")
+			}
+		}
+	}
+
+	// MARK: - Outbound message chunking
+
+	/// Splits `content` into UTF-8-safe chunks that each fit within the IRC
+	/// 512-byte line budget for a PRIVMSG to `target`. Newlines in the input
+	/// become chunk boundaries (IRC doesn't allow raw LF in a single line).
+	public func splitMessage(_ content: String, for target: String) -> [String] {
+		let maxBytes = safeBodyLimit(for: target)
+		var result: [String] = []
+		for line in content.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init) {
+			result.append(contentsOf: chunkMessage(line, maxBytes: maxBytes))
+		}
+		// Drop trailing empty chunks from trailing newlines, keep at least one
+		// so an intentionally-blank message still sends.
+		while let last = result.last, last.isEmpty, result.count > 1 {
+			result.removeLast()
+		}
+		return result
+	}
+
+	/// IRC's per-line limit is 512 bytes including the server-added prefix
+	/// (`:nick!user@host `) and the trailing `\r\n`. We don't know our exact
+	/// hostname without a WHOIS, so we assume a conservative upper bound.
+	private func safeBodyLimit(for target: String) -> Int {
+		let nick = server.nickname
+		let user = connection.username
+		let hostnameAssumed = 70   // conservative max; most cloaks are ~25
+		let prefixBytes = 1 + nick.utf8.count + 1 + user.utf8.count + 1 + hostnameAssumed + 1
+		let commandBytes = "PRIVMSG ".utf8.count + target.utf8.count + " :".utf8.count
+		let trailerBytes = 2   // \r\n
+		let budget = 512 - prefixBytes - commandBytes - trailerBytes
+		return max(budget, 50)
+	}
+
+	/// Greedy chunker: fills each chunk up to `maxBytes` of UTF-8, preferring
+	/// to break at the last space in the final ~40% of the chunk when one
+	/// exists, otherwise at the next codepoint boundary.
+	private func chunkMessage(_ content: String, maxBytes: Int) -> [String] {
+		guard maxBytes > 0 else { return [content] }
+		if content.utf8.count <= maxBytes { return [content] }
+
+		var chunks: [String] = []
+		var remaining = content
+
+		while !remaining.isEmpty {
+			if remaining.utf8.count <= maxBytes {
+				chunks.append(remaining)
+				break
+			}
+
+			var bytesSoFar = 0
+			var lastSpace: String.Index? = nil
+			var cutoff: String.Index = remaining.startIndex
+
+			for idx in remaining.indices {
+				let charBytes = remaining[idx].utf8.count
+				if bytesSoFar + charBytes > maxBytes { break }
+				bytesSoFar += charBytes
+				if remaining[idx] == " " { lastSpace = idx }
+				cutoff = remaining.index(after: idx)
+			}
+
+			if let space = lastSpace {
+				let spaceUTF8 = space.samePosition(in: remaining.utf8) ?? remaining.utf8.startIndex
+				let spaceOffset = remaining.utf8.distance(from: remaining.utf8.startIndex, to: spaceUTF8)
+				// Only prefer the last-space split if it's in the final ~40%.
+				if spaceOffset >= (bytesSoFar * 6 / 10) {
+					chunks.append(String(remaining[..<space]))
+					remaining = String(remaining[remaining.index(after: space)...])
+					continue
+				}
+			}
+
+			chunks.append(String(remaining[..<cutoff]))
+			remaining = String(remaining[cutoff...])
+		}
+
+		return chunks
 	}
 
 	/// Returns the channel object for the given target (channel name or nickname),

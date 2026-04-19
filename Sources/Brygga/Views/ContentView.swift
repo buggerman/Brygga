@@ -210,8 +210,12 @@ struct ChatView: View {
 		if trimmed.hasPrefix("/") {
 			handleSlash(trimmed, session: session, channel: channel, sender: sender)
 		} else {
-			let localEcho = Message(sender: sender, content: trimmed, kind: .privmsg)
-			session.record(localEcho, in: channel)
+			// Split the same way the wire split runs, so local echo matches
+			// exactly what the server receives (and what other clients see).
+			for chunk in session.splitMessage(trimmed, for: channel.name) where !chunk.isEmpty {
+				let localEcho = Message(sender: sender, content: chunk, kind: .privmsg)
+				session.record(localEcho, in: channel)
+			}
 			Task {
 				try? await session.sendMessage(to: channel.name, content: trimmed)
 			}
