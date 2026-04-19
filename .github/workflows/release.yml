@@ -2,11 +2,13 @@ name: Release
 
 on:
   push:
+    branches:
+      - main        # every commit publishes a rolling "latest" release
     tags:
-      - 'v*'
+      - 'v*'        # explicit tag publishes a stable release
 
 permissions:
-  contents: write   # needed to create the GitHub Release
+  contents: write   # needed to create/replace GitHub Releases and tags
 
 jobs:
   release:
@@ -22,21 +24,34 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Derive version from tag
-        id: version
+      - name: Determine release params
+        id: params
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          # Strip leading 'v' from v1.2.3 -> 1.2.3
-          VERSION="${TAG#v}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            TITLE="Brygga ${VERSION}"
+            ROLLING=false
+          else
+            # Rolling build on main — reuses the 'latest' tag.
+            TAG="latest"
+            VERSION="0.1.0-build.${{ github.run_number }}"
+            TITLE="Latest (build ${{ github.run_number }})"
+            ROLLING=true
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "title=$TITLE"
+            echo "rolling=$ROLLING"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Test
         run: swift test
 
       - name: Build release .app
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ steps.params.outputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: ./Scripts/build-app.sh release
 
@@ -52,23 +67,33 @@ jobs:
       - name: Create DMG
         run: |
           mkdir -p dist
-          DMG="dist/Brygga-${{ steps.version.outputs.tag }}.dmg"
+          DMG="dist/Brygga-${{ steps.params.outputs.tag }}.dmg"
           hdiutil create \
-            -volname "Brygga ${{ steps.version.outputs.version }}" \
+            -volname "Brygga ${{ steps.params.outputs.version }}" \
             -srcfolder build/Brygga.app \
             -ov -format UDZO \
             "$DMG"
           ls -la dist/
 
-      - name: Create GitHub Release
+      - name: Replace rolling release (if applicable)
+        if: steps.params.outputs.rolling == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Remove the old rolling release + its tag so the next step can
+          # recreate them at this commit. Ignore failures when nothing exists.
+          gh release delete latest --yes --cleanup-tag || true
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Brygga ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.params.outputs.tag }}
+          name: ${{ steps.params.outputs.title }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.params.outputs.rolling == 'true' }}
           generate_release_notes: true
           files: dist/Brygga-*.dmg
+          target_commitish: ${{ github.sha }}
           body: |
             ## Installation
 
@@ -76,4 +101,4 @@ jobs:
             2. First launch: macOS will say the app can't be verified. Right-click (or Ctrl-click) → **Open** → confirm. This is because the binary is ad-hoc signed, not Developer-ID signed.
             3. Requires **macOS 26 or later, Apple Silicon only**.
 
-            See [CHANGELOG / commits](https://github.com/buggerman/Brygga/commits/${{ steps.version.outputs.tag }}) for what's new.
+            Commit: `${{ github.sha }}`
