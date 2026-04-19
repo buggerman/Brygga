@@ -4,7 +4,7 @@ Brygga aims for **feature parity with mIRC** for everything a daily-driver IRC u
 
 ## Already shipped
 
-Core daily-driver capability is in place:
+Phase 1 is effectively complete — everything a mIRC daily-driver expects (minus DCC and scripting) is in place.
 
 ### Connection and identity
 - TLS connect on 6697 via `NWConnection`
@@ -18,46 +18,52 @@ Core daily-driver capability is in place:
 - Clean `QUIT` on app termination
 - Auto-reconnect with exponential backoff
 - User-initiated disconnect that stays disconnected
+- Outbound token-bucket flood protection (1200-byte burst, 300 bytes/sec) with PONG bypass
+- Long-message chunking: PRIVMSG/ACTION split at space boundaries to respect the 512-byte IRC line limit; never splits mid-UTF-8
 
 ### Commands
-- `/join`, `/part`, `/nick`, `/me`, `/msg`, `/query`, `/topic`, `/quit`, `/disconnect`, `/list`, `/ignore`, `/unignore`
+- `/join`, `/part`, `/nick`, `/me`, `/msg`, `/query`, `/topic`, `/quit`, `/disconnect`, `/list`
+- `/whois` with formatted 311/312/313/317/318/319/330/335/378/379/671 numeric output
+- `/away [msg]` + 305/306 handling
+- `/invite <nick> [#channel]` with auto-join-on-invite preference
+- `/ignore <nick|mask>` + `/unignore` + list
+- `/notify <nick>` buddy list with 60s ISON polling
+- `/perform` — per-server raw-line command list fired after 001
 - Slash fallthrough sends raw IRC lines
 
 ### UX
 - Two-column `NavigationSplitView` with user-list inspector (auto-hides for PMs and server console)
-- Per-server + per-channel persistence (host, port, TLS, nick, SASL creds, auto-join list, open queries, ignore list)
+- Per-server + per-channel persistence: host, port, TLS, nick, SASL creds, auto-join list, open queries, ignore list, notify list, perform commands
 - Scrollback persistence as JSONL, rehydrated on launch
+- Opt-in plain-text disk logging under `~/Documents/Brygga Logs/<network>/<channel>.log`
 - Stable per-nick colors (FNV-1a hashed into a 16-color palette)
-- mIRC control-code rendering: `^B` bold, `^I` italic, `^U` underline, `^S` strikethrough, `^V` reverse, `^O` reset, `^K<fg>[,<bg>]` with mIRC 16-color palette
+- mIRC control-code rendering: `^B` bold, `^I` italic, `^U` underline, `^S` strikethrough, `^V` reverse, `^O` reset, `^K<fg>[,<bg>]` with the mIRC 16-color palette
 - URL and email detection in messages — clickable, underlined, accent-colored
 - Nick-mention highlight with accent gutter + Dock badge + macOS notifications
 - Custom highlight keywords (user-configurable in Preferences)
+- Line marker — horizontal divider showing where you last read a channel when returning
+- Find in buffer (`Cmd+F`) with live filter + match count
 - Tab nick completion with cycling
 - Up/down input history (per-InputBar)
 - `/list` channel browser with search + click-to-join
-- Sidebar context menu — Connect / Disconnect / Remove Server
+- Sidebar context menu on server rows — Connect / Disconnect / Remove Server
+- User-list context menu — Whois / Query / Op / Deop / Voice / Devoice / Kick / Kick+Ban / Ignore
+- Inline topic editing — click the topic bar → edit → Enter sends TOPIC
 - MOTD display
-- `/whois` formatted output (numerics 311/312/313/317/318/319/330/335/378/379/671 parsed into readable lines)
 - CTCP auto-responses with per-sender cooldown: VERSION, PING, TIME, CLIENTINFO, SOURCE
-- `/ignore` with nick-exact or hostmask-glob matching
-- Preferences window (`Cmd+,`) — General pane (show joins/parts) + Notifications pane (highlight keywords)
+- Preferences window (`Cmd+,`) — General pane (show joins/parts, auto-join-on-invite, disk logging) + Notifications pane (highlight keywords)
+- `/away` moon indicator on sidebar server row and console header
 
-## Phase 1 — Essential parity (remaining)
+## Phase 1 — remaining
 
-Goal: anything a mIRC daily-driver expects, minus DCC.
+The only Phase 1 item still open is Preferences-window breadth. Functionality exists; UI coverage lags.
 
-1. **Long-message splitting** — PRIVMSG chunked to respect the 512-byte IRC line limit.
-2. **Outbound flood protection** — token-bucket rate limit so a big paste won't trigger a server-side `KILL`.
-3. **User-list context menu** — right-click a nick → Whois / Query / Op / Deop / Voice / Kick / Kick+Ban / Ignore.
-4. **`/away` command** with away indicator on your own server row; cancel-away-on-message option.
-5. **`/invite`** + auto-join-on-invite preference.
-6. **Inline topic editing** — click the topic bar → edit in place → `TOPIC` on enter.
-7. **Line marker** — horizontal bar where you last read a channel; visible when returning.
-8. **Find in buffer** (`Cmd+F`) — scoped search across the current channel's scrollback.
-9. **Preferences window expansion** — add Identity (default nick/user/realname), Appearance (timestamp format, line spacing, nick colors on/off), Ignore list editor, Logging pane.
-10. **Disk logging** — opt-in, plain-text `~/Documents/Brygga Logs/<network>/<channel>.log`; distinct from JSONL scrollback, human-readable.
-11. **Notify / buddy list** — list of nicks to watch; uses the `WATCH` extension where supported, falls back to periodic `ISON`/WHOIS polling.
-12. **Per-server `perform`** — list of commands to run automatically after 001 welcome.
+1. **Preferences window expansion** — currently has General + Notifications. Add:
+   - **Identity** — default nick / user / real name used by the Connect sheet
+   - **Appearance** — timestamp format (12h/24h), line spacing, nick-colors on/off toggle
+   - **Ignore** — per-server ignore-list table editor (list mutation today requires `/ignore`)
+   - **Logging** — currently a section inside General; promote to its own pane with log folder picker and a "reveal in Finder" button
+   - **Servers** — edit saved servers (host, port, SASL creds, perform list, auto-join) without removing + re-adding
 
 ## Phase 2 — Modern-native wins
 
@@ -99,17 +105,12 @@ Not building these, and not feeling bad about it:
 
 ## Suggested next commit order
 
-1. **Long-message splitting** — foundational, prevents truncation surprises.
-2. **Outbound flood protection** — pairs naturally with (1).
-3. **User-list context menu** — surfaces op / query / whois / ignore actions we already have behind single commands.
-4. **`/away` command** + indicator.
-5. **`/invite` + auto-join-on-invite**.
-6. **Inline topic editing**.
-7. **Line marker**.
-8. **Find in buffer** (`Cmd+F`).
-9. **Disk logging**.
-10. **Preferences window expansion** (Identity + Appearance + Ignore editor + Logging toggle).
-11. **Notify / buddy list**.
-12. **Per-server `perform`**.
+Phase 1 closes with a proper Preferences expansion; Phase 2 opens with chathistory.
 
-Then Phase 2.
+1. **Preferences expansion** — Identity, Appearance, per-server Ignore editor, Logging pane, Servers editor.
+2. **IRCv3 `chathistory`** (Phase 2 #1) — fills the "you missed it" gap and benefits from the CAP plumbing already in place.
+3. **Detachable tabs** (Phase 2 #5) — `Cmd+Shift+D` pops the selected channel into its own window.
+4. **Favorites / pinned channels** (Phase 2 #6) — sidebar ordering + keyboard-first navigation.
+5. **SASL SCRAM-SHA-256** (Phase 2 #7) — add after chathistory, before EXTERNAL.
+
+Then the rest of Phase 2 and Phase 3 in whichever order the friend group starts asking for.
