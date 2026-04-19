@@ -1126,14 +1126,17 @@ struct InputBar: View {
 	var onTyping: ((String) -> Void)? = nil
 	let onSubmit: () -> Void
 
+	@Environment(AppState.self) private var appState
+
 	// Completion cycle state.
 	@State private var completionBase: String = ""
 	@State private var completionPrefix: String = ""
 	@State private var completionMatches: [String] = []
 	@State private var completionIndex: Int = 0
 
-	// Input history.
-	@State private var history: [String] = []
+	// Input history — the entries live on `AppState.commandHistory` so
+	// they survive channel switches; only the cursor + in-progress draft
+	// are local.
 	@State private var historyIndex: Int? = nil
 	@State private var draftBeforeHistory: String = ""
 
@@ -1188,8 +1191,7 @@ struct InputBar: View {
 	private func handleSubmit() {
 		let trimmed = draft.trimmingCharacters(in: .whitespaces)
 		if !trimmed.isEmpty {
-			history.append(trimmed)
-			if history.count > 100 { history.removeFirst(history.count - 100) }
+			appState.pushCommandHistory(trimmed)
 		}
 		historyIndex = nil
 		resetCompletion()
@@ -1306,6 +1308,7 @@ struct InputBar: View {
 	// MARK: - Input history
 
 	private func handleHistoryUp() {
+		let history = appState.commandHistory
 		guard !history.isEmpty else { return }
 		if historyIndex == nil {
 			draftBeforeHistory = draft
@@ -1321,6 +1324,7 @@ struct InputBar: View {
 	}
 
 	private func handleHistoryDown() {
+		let history = appState.commandHistory
 		guard let idx = historyIndex else { return }
 		if idx + 1 < history.count {
 			historyIndex = idx + 1

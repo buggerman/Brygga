@@ -41,6 +41,23 @@ public final class AppState {
 	/// Coordination flag for the `Cmd+J` quick-join sheet.
 	public var showingQuickJoin: Bool = false
 
+	/// Shared input history for every `InputBar`. Up/Down arrow cycles
+	/// through it in mIRC fashion. Bounded to 100 entries to keep state
+	/// cheap and session-only (not persisted across launches).
+	public var commandHistory: [String] = []
+
+	/// Push a new entry onto `commandHistory`, collapsing consecutive
+	/// duplicates and capping the list at 100 items.
+	public func pushCommandHistory(_ line: String) {
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+		guard !trimmed.isEmpty else { return }
+		if commandHistory.last == trimmed { return }
+		commandHistory.append(trimmed)
+		if commandHistory.count > 100 {
+			commandHistory.removeFirst(commandHistory.count - 100)
+		}
+	}
+
 	/// Shared cache + fetcher for inline link previews. Views call
 	/// `linkPreviews.fetchIfNeeded(url)` on appear and read
 	/// `linkPreviews.preview(for: url)` to render. Off-by-default fetching
