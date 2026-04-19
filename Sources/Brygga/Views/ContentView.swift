@@ -1222,48 +1222,187 @@ struct InputBar: View {
 	@State private var lastTypingSent: Date = .distantPast
 	@State private var lastTypingState: String = "done"
 
-	var body: some View {
-		HStack(spacing: 6) {
-			Text(nickname)
-				.foregroundStyle(.secondary)
-				.font(.system(.body, design: .monospaced))
-			Image(systemName: "chevron.right")
-				.foregroundStyle(.secondary)
-				.font(.system(size: 10))
+	// Slack-style pickable popover for trailing `@<prefix>` (channel
+	// mentions) and `:<prefix>` (emoji shortcodes). Arrow keys navigate,
+	// Enter / Tab insert the highlighted match, Escape dismisses.
+	@State private var pickerRows: [CompletionRow] = []
+	@State private var pickerIndex: Int = 0
+	@State private var pickerBase: String = ""
+	/// `@` for nick mentions, `:` for emoji.
+	@State private var pickerKind: Character = "@"
 
-			TextField(placeholder, text: $draft)
-				.textFieldStyle(.plain)
-				.font(.system(.body, design: .monospaced))
-				.onSubmit(handleSubmit)
-				.onKeyPress(.tab) {
-					handleTab()
-					return .handled
-				}
-				.onKeyPress(.upArrow) {
-					handleHistoryUp()
-					return .handled
-				}
-				.onKeyPress(.downArrow) {
-					handleHistoryDown()
-					return .handled
-				}
-				.onChange(of: draft) { _, _ in
-					autoReplaceEmojiShortcode()
-					// Any external edit resets completion cycle.
-					if completionPrefix.isEmpty {
+	private var pickerActive: Bool { !pickerRows.isEmpty }
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			if pickerActive {
+				CompletionPopover(
+					rows: pickerRows,
+					selectedIndex: pickerIndex,
+					onPick: { pickCompletion(atIndex: $0) }
+				)
+				.padding(.horizontal, 12)
+				.padding(.top, 6)
+			}
+			HStack(spacing: 6) {
+				Text(nickname)
+					.foregroundStyle(.secondary)
+					.font(.system(.body, design: .monospaced))
+				Image(systemName: "chevron.right")
+					.foregroundStyle(.secondary)
+					.font(.system(size: 10))
+
+				TextField(placeholder, text: $draft)
+					.textFieldStyle(.plain)
+					.font(.system(.body, design: .monospaced))
+					.onSubmit {
+						if pickerActive {
+							pickCompletion(atIndex: pickerIndex)
+						} else {
+							handleSubmit()
+						}
+					}
+					.onKeyPress(.tab) {
+						if pickerActive {
+							pickCompletion(atIndex: pickerIndex)
+						} else {
+							handleTab()
+						}
+						return .handled
+					}
+					.onKeyPress(.upArrow) {
+						if pickerActive {
+							pickerIndex = (pickerIndex - 1 + pickerRows.count) % pickerRows.count
+						} else {
+							handleHistoryUp()
+						}
+						return .handled
+					}
+					.onKeyPress(.downArrow) {
+						if pickerActive {
+							pickerIndex = (pickerIndex + 1) % pickerRows.count
+						} else {
+							handleHistoryDown()
+						}
+						return .handled
+					}
+					.onKeyPress(.escape) {
+						if pickerActive {
+							clearPicker()
+							return .handled
+						}
+						return .ignored
+					}
+					.onChange(of: draft) { _, _ in
+						autoReplaceEmojiShortcode()
+						updatePicker()
+						// Any external edit resets completion cycle.
+						if completionPrefix.isEmpty {
+							emitTypingForDraftChange()
+							return
+						}
+						if !draft.hasSuffix(completionMatches.indices.contains(completionIndex)
+							? completionMatches[completionIndex] : "") {
+							resetCompletion()
+						}
 						emitTypingForDraftChange()
-						return
 					}
-					if !draft.hasSuffix(completionMatches.indices.contains(completionIndex)
-						? completionMatches[completionIndex] : "") {
-						resetCompletion()
-					}
-					emitTypingForDraftChange()
-				}
+			}
+			.padding(.horizontal, 12)
+			.padding(.vertical, 8)
 		}
-		.padding(.horizontal, 12)
-		.padding(.vertical, 8)
 		.background(.bar)
+	}
+
+	// MARK: - Completion popover (@mention + :emoji)
+
+	/// Scans the draft's tail for an active `@<prefix>` or `:<prefix>`
+	/// token. The trigger char (`@` / `:`) must sit at line start or
+	/// directly after whitespace, and the prefix must not contain a
+	/// closing colon (emoji) or whitespace.
+	private func detectPickerContext() -> (kind: Character, base: String, prefix: String)? {
+		guard !draft.isEmpty else { return nil }
+		// Walk back from the end; stop at the first trigger char.
+		var i = draft.endIndex
+		while i > draft.startIndex {
+			i = draft.index(before: i)
+			let ch = draft[i]
+			if ch == "@" || ch == ":" {
+				// Trigger must be at line start or follow whitespace.
+				if i != draft.startIndex {
+					let prev = draft[draft.index(before: i)]
+					if !prev.isWhitespace { return nil }
+				}
+				let tail = draft[draft.index(after: i)...]
+				// Validate the token body: emoji allows letters/digits/_/-/+;
+				// mentions also allow IRC-nick punctuation.
+				for tailCh in tail {
+					if tailCh.isWhitespace { return nil }
+					if ch == ":" && tailCh == ":" { return nil }
+					let allowedMention: Set<Character> = ["_", "-", "[", "]", "{", "}", "|", "\\", "^", "`"]
+					let allowedEmoji: Set<Character> = ["_", "-", "+"]
+					let allowed = ch == "@" ? allowedMention : allowedEmoji
+					if !(tailCh.isLetter || tailCh.isNumber || allowed.contains(tailCh)) {
+						return nil
+					}
+				}
+				return (ch, String(draft[..<i]), String(tail))
+			}
+			if ch.isWhitespace { return nil }
+		}
+		return nil
+	}
+
+	private func updatePicker() {
+		guard let ctx = detectPickerContext() else {
+			clearPicker()
+			return
+		}
+		let lowered = ctx.prefix.lowercased()
+		let rows: [CompletionRow]
+		switch ctx.kind {
+		case "@":
+			rows = suggestions
+				.filter { $0.lowercased().hasPrefix(lowered) }
+				.sorted(by: { $0.lowercased() < $1.lowercased() })
+				.prefix(8)
+				.map { CompletionRow(primary: $0, secondary: nil, glyph: "@", insert: "@\($0) ") }
+		case ":":
+			// Empty prefix → show nothing; prevents a giant list on bare `:`.
+			guard !lowered.isEmpty else { clearPicker(); return }
+			rows = EmojiShortcodes.matches(prefix: lowered)
+				.prefix(8)
+				.compactMap { code -> CompletionRow? in
+					guard let glyph = EmojiShortcodes.emoji(for: code) else { return nil }
+					return CompletionRow(primary: ":\(code):", secondary: glyph, glyph: nil, insert: glyph)
+				}
+		default:
+			rows = []
+		}
+		if rows.isEmpty {
+			clearPicker()
+			return
+		}
+		pickerRows = rows
+		pickerBase = ctx.base
+		pickerKind = ctx.kind
+		// Reset highlight when the filter narrows past the current choice.
+		if !pickerRows.indices.contains(pickerIndex) {
+			pickerIndex = 0
+		}
+	}
+
+	private func pickCompletion(atIndex index: Int) {
+		guard pickerRows.indices.contains(index) else { return }
+		let row = pickerRows[index]
+		draft = pickerBase + row.insert
+		clearPicker()
+	}
+
+	private func clearPicker() {
+		pickerRows = []
+		pickerIndex = 0
+		pickerBase = ""
 	}
 
 	private func handleSubmit() {
@@ -1436,6 +1575,66 @@ struct InputBar: View {
 			historyIndex = nil
 			draft = draftBeforeHistory
 		}
+	}
+}
+
+// MARK: - Completion popover (shared by @mention + :emoji)
+
+struct CompletionRow: Identifiable, Equatable {
+	let id = UUID()
+	let primary: String
+	let secondary: String?
+	let glyph: String?
+	let insert: String
+}
+
+struct CompletionPopover: View {
+	let rows: [CompletionRow]
+	let selectedIndex: Int
+	let onPick: (Int) -> Void
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+				HStack(spacing: 8) {
+					if let glyph = row.glyph {
+						Text(glyph)
+							.foregroundStyle(.secondary)
+							.font(.system(.body, design: .monospaced))
+							.frame(width: 14, alignment: .leading)
+					} else if let secondary = row.secondary {
+						Text(secondary)
+							.font(.system(size: 16))
+							.frame(width: 20, alignment: .leading)
+					}
+					Text(row.primary)
+						.font(.system(.body, design: .monospaced))
+					Spacer(minLength: 0)
+					if row.glyph == nil, let secondary = row.secondary, row.insert == secondary {
+						// Emoji row — `secondary` already rendered on the left.
+						EmptyView()
+					}
+				}
+				.padding(.horizontal, 10)
+				.padding(.vertical, 4)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.background(
+					RoundedRectangle(cornerRadius: 4, style: .continuous)
+						.fill(index == selectedIndex
+							? Color.accentColor.opacity(0.25)
+							: Color.clear)
+				)
+				.contentShape(Rectangle())
+				.onTapGesture { onPick(index) }
+			}
+		}
+		.padding(4)
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+		.overlay(
+			RoundedRectangle(cornerRadius: 6, style: .continuous)
+				.strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+		)
 	}
 }
 
