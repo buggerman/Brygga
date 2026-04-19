@@ -403,6 +403,7 @@ public final class IRCSession {
 				Task { try? await join(name) }
 			}
 			notifyOnline = []
+			chathistoryRequested = []
 			startNotifyPolling()
 			for line in server.performCommands {
 				Task { try? await connection.send(line) }
@@ -537,6 +538,25 @@ public final class IRCSession {
 			// PMs are inherently "for you" — always a highlight.
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
+		}
+	}
+
+	// MARK: - chathistory
+
+	/// Channel names (lowercased) for which we've already requested history
+	/// this session. Cleared on each 001 welcome so reconnects re-request.
+	private var chathistoryRequested: Set<String> = []
+
+	private func requestChathistoryIfNeeded(for channel: Channel) {
+		let name = channel.name
+		let key = name.lowercased()
+		guard !chathistoryRequested.contains(key) else { return }
+		let conn = connection
+		Task { [weak self] in
+			let caps = await conn.enabledCaps
+			guard caps.contains("chathistory") || caps.contains("draft/chathistory") else { return }
+			self?.chathistoryRequested.insert(key)
+			try? await conn.send("CHATHISTORY LATEST \(name) * 100")
 		}
 	}
 
@@ -999,6 +1019,7 @@ public final class IRCSession {
 			}
 			channel.isJoined = true
 			onChannelsChanged?()
+			requestChathistoryIfNeeded(for: channel)
 		} else {
 			guard let channel = server.channels.first(where: { $0.name == channelName }) else { return }
 			if !channel.users.contains(where: { $0.nickname == nick }) {

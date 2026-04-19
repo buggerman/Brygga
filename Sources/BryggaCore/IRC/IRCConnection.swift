@@ -247,6 +247,8 @@ public actor IRCConnection {
 		"away-notify",
 		"invite-notify",
 		"batch",
+		"chathistory",
+		"draft/chathistory",
 	]
 
 	public private(set) var enabledCaps: Set<String> = []
