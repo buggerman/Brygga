@@ -8,7 +8,7 @@ Phase 1 is effectively complete — everything a mIRC daily-driver expects (minu
 
 ### Connection and identity
 - TLS connect on 6697 via `NWConnection`
-- SASL PLAIN authentication during connection registration
+- SASL authentication — SCRAM-SHA-256 preferred when the server advertises it (RFC 7677 exchange with PBKDF2 via CommonCrypto and HMAC/SHA-256 via CryptoKit), falls back to PLAIN otherwise
 - IRCv3 CAP negotiation: `sasl`, `server-time`, `multi-prefix`, `userhost-in-names`, `chghost`, `account-tag`, `account-notify`, `away-notify`, `invite-notify`, `batch`, `chathistory` / `draft/chathistory`
 - `server-time` tag used for message timestamps (accurate scrollback across reconnects)
 - `userhost-in-names` → populates `User.username` / `hostname` on NAMES
@@ -86,7 +86,7 @@ These aren't in mIRC or are awkward in mIRC; they're where Brygga earns its "mod
 3. **Find across all channels** (`Cmd+Shift+F`).
 4. ~~**Detachable tabs** (`Cmd+Shift+D` pops a channel into its own window).~~ Shipped — each channel gets its own `WindowGroup` window reusing `TopicBar` / `MessageList` / `InputBar` over a shared `AppState`.
 5. ~~**Favorites / pinned channels** in the sidebar.~~ Shipped — right-click → Pin to Favorites moves channels into a top sidebar section, `Cmd+1…9` jumps to the first nine pinned channels, pin state is persisted per server in `servers.json`.
-6. **SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.
+6. ~~**SASL SCRAM-SHA-256** — stronger than PLAIN; Ergo supports it.~~ Shipped — auto-selected when the server advertises it in `CAP LS sasl=…`; verified against the RFC 7677 test vector.
 7. **SASL EXTERNAL** — client-certificate auth for networks that allow it.
 
 ## Phase 3 — Polish
@@ -118,10 +118,9 @@ Not building these, and not feeling bad about it:
 
 Phase 2 is up. Recommended path:
 
-1. **SASL SCRAM-SHA-256** (Phase 2 #6) — stronger than PLAIN; Ergo supports it.
-2. **IRCv3 typing indicator** (Phase 2 #1).
-3. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
-4. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
-5. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
+1. **IRCv3 typing indicator** (Phase 2 #1).
+2. **Find across all channels** (Phase 2 #3) — `Cmd+Shift+F`.
+3. **Inline link previews** (Phase 2 #2) — image / OG fetch, opt-in.
+4. **SASL EXTERNAL** (Phase 2 #7) — client-cert auth.
 
 Then Phase 3 polish: emoji autocomplete, markdown-style input, channel-switching shortcuts, status bar, Liquid Glass tuning.

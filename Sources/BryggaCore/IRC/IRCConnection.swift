@@ -255,6 +255,16 @@ public actor IRCConnection {
 	private var supportedCaps: Set<String> = []
 	private var capNegotiationActive: Bool = false
 
+	/// SASL mechanisms advertised by the server via `CAP LS sasl=…`.
+	/// Empty when the server didn't list any — we fall back to PLAIN in that
+	/// case for compatibility with servers that advertise bare `sasl`.
+	private var saslMechanisms: [String] = []
+	/// Mechanism we chose to use for the current handshake.
+	private var saslMechanism: String?
+	/// Live SCRAM-SHA-256 state machine, populated only when `saslMechanism`
+	/// is SCRAM-SHA-256.
+	private var scramClient: SCRAMSHA256Client?
+
 	private var useSasl: Bool {
 		guard let account = saslAccount, !account.isEmpty,
 		      let password = saslPassword, !password.isEmpty else { return false }
@@ -268,6 +278,9 @@ public actor IRCConnection {
 		capNegotiationActive = true
 		supportedCaps = []
 		enabledCaps = []
+		saslMechanisms = []
+		saslMechanism = nil
+		scramClient = nil
 		try? await send("CAP LS 302")
 		try? await send("NICK \(nickname)")
 		try? await send("USER \(username) 0 * :\(realName)")
@@ -395,12 +408,7 @@ public actor IRCConnection {
 				break
 			}
 		case "AUTHENTICATE":
-			guard msg.params.first == "+",
-			      let account = saslAccount,
-			      let password = saslPassword else { return }
-			let payload = "\0\(account)\0\(password)"
-			let encoded = Data(payload.utf8).base64EncodedString()
-			Task { [weak self] in try? await self?.send("AUTHENTICATE \(encoded)") }
+			handleAuthenticate(msg)
 		default:
 			break
 		}
@@ -420,10 +428,18 @@ public actor IRCConnection {
 		// Multi-line LS: params[2] is "*" for continuation; final line has caps in params[2].
 		let isContinuation = msg.params.count >= 4 && msg.params[2] == "*"
 		let capsField = msg.params.last ?? ""
-		let advertised = capsField.split(separator: " ").map {
-			String($0.split(separator: "=").first ?? "")
+		for token in capsField.split(separator: " ") {
+			let parts = token.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+			let name = String(parts[0])
+			supportedCaps.insert(name)
+			// Pick up the SASL mechanism list when the server advertises it
+			// as `sasl=PLAIN,SCRAM-SHA-256,EXTERNAL`.
+			if name == "sasl", parts.count == 2 {
+				saslMechanisms = parts[1]
+					.split(separator: ",")
+					.map { $0.uppercased() }
+			}
 		}
-		supportedCaps.formUnion(advertised)
 		if isContinuation { return }
 
 		let toRequest = Self.desiredCaps.intersection(supportedCaps)
@@ -435,6 +451,66 @@ public actor IRCConnection {
 		Task { [weak self] in try? await self?.send("CAP REQ :\(list)") }
 	}
 
+	/// Dispatches an incoming `AUTHENTICATE …` line to the active mechanism's
+	/// state machine. Supports PLAIN (single round) and SCRAM-SHA-256 (three
+	/// rounds: client-first → server-first → client-final → server-final).
+	private func handleAuthenticate(_ msg: IRCLineParserResult) {
+		guard let payload = msg.params.first else { return }
+		switch saslMechanism {
+		case "PLAIN":
+			// PLAIN: server → "+", we → base64("\0user\0pass").
+			guard payload == "+",
+			      let account = saslAccount,
+			      let password = saslPassword else { return }
+			let blob = "\0\(account)\0\(password)"
+			let encoded = Data(blob.utf8).base64EncodedString()
+			Task { [weak self] in try? await self?.send("AUTHENTICATE \(encoded)") }
+
+		case "SCRAM-SHA-256":
+			guard scramClient != nil else { return }
+			if payload == "+" {
+				// Server ready for client-first-message.
+				let clientFirst = scramClient!.clientFirstMessage()
+				let encoded = Data(clientFirst.utf8).base64EncodedString()
+				Task { [weak self] in try? await self?.send("AUTHENTICATE \(encoded)") }
+				return
+			}
+			// Base64-decode the server's payload and route by step.
+			guard let decoded = Data(base64Encoded: payload),
+			      let serverMessage = String(data: decoded, encoding: .utf8) else {
+				abortSasl()
+				return
+			}
+			if serverMessage.hasPrefix("v=") {
+				// server-final-message — verify signature; let 903 close cap.
+				do {
+					try scramClient!.verifyServerFinal(serverMessage)
+				} catch {
+					abortSasl()
+				}
+				return
+			}
+			// Otherwise: server-first-message. Compute and send client-final.
+			do {
+				let clientFinal = try scramClient!.clientFinalMessage(serverFirst: serverMessage)
+				let encoded = Data(clientFinal.utf8).base64EncodedString()
+				Task { [weak self] in try? await self?.send("AUTHENTICATE \(encoded)") }
+			} catch {
+				abortSasl()
+			}
+
+		default:
+			break
+		}
+	}
+
+	/// Abort the in-flight SASL exchange by sending `AUTHENTICATE *` and let
+	/// the 904/906 numeric close cap negotiation.
+	private func abortSasl() {
+		scramClient = nil
+		Task { [weak self] in try? await self?.send("AUTHENTICATE *") }
+	}
+
 	private func handleCapACK(_ msg: IRCLineParserResult) {
 		let acked = (msg.params.last ?? "")
 			.split(separator: " ")
@@ -442,10 +518,23 @@ public actor IRCConnection {
 		enabledCaps.formUnion(acked)
 
 		if enabledCaps.contains("sasl") && useSasl {
-			Task { [weak self] in try? await self?.send("AUTHENTICATE PLAIN") }
+			let mech = preferredSaslMechanism()
+			saslMechanism = mech
+			if mech == "SCRAM-SHA-256",
+			   let account = saslAccount, let password = saslPassword {
+				scramClient = SCRAMSHA256Client(username: account, password: password)
+			}
+			Task { [weak self] in try? await self?.send("AUTHENTICATE \(mech)") }
 		} else {
 			finishCapNegotiation()
 		}
+	}
+
+	/// Preferred mechanism given `saslMechanisms`: SCRAM-SHA-256 wins over
+	/// PLAIN; if the server didn't advertise any, fall back to PLAIN.
+	private func preferredSaslMechanism() -> String {
+		if saslMechanisms.contains("SCRAM-SHA-256") { return "SCRAM-SHA-256" }
+		return "PLAIN"
 	}
 
 	/// Handle post-registration CAP NEW / CAP DEL so our `enabledCaps` stays current.
