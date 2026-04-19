@@ -39,6 +39,8 @@ struct GeneralPane: View {
 	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 	@AppStorage(PreferencesKeys.markdownInputEnabled) private var markdownInputEnabled = true
 	@AppStorage(PreferencesKeys.shareTypingEnabled) private var shareTypingEnabled = true
+	@AppStorage(PreferencesKeys.defaultLeaveMessage) private var defaultLeaveMessage =
+		PreferencesKeys.defaultLeaveMessageFallback
 
 	var body: some View {
 		Form {
@@ -64,6 +66,14 @@ struct GeneralPane: View {
 				Toggle("Share typing indicator with others", isOn: $shareTypingEnabled)
 			} footer: {
 				Text("Sends an IRCv3 `+typing` tag so other users can see when you're composing a message. Incoming typing indicators from others are always shown regardless of this setting.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			Section {
+				TextField("Default leave message", text: $defaultLeaveMessage, axis: .vertical)
+					.lineLimit(2...4)
+			} footer: {
+				Text("Appended to `/leave`, `/part`, and Cmd+W when you don't supply your own reason. Clear the field to leave without any reason.")
 					.font(.caption)
 					.foregroundStyle(.secondary)
 			}

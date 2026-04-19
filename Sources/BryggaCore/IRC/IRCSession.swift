@@ -133,8 +133,20 @@ public final class IRCSession {
 	}
 
 	public func part(_ channel: String, reason: String? = nil) async throws {
-		if let reason = reason, !reason.isEmpty {
-			try await connection.send("PART \(channel) :\(reason)")
+		// Fall back to the user's default leave message when no explicit
+		// reason was provided. Empty-string stored value means the user
+		// explicitly opted out of sending a default.
+		let explicit = reason?.trimmingCharacters(in: .whitespaces)
+		let effective: String?
+		if let explicit, !explicit.isEmpty {
+			effective = explicit
+		} else {
+			let stored = UserDefaults.standard.string(forKey: PreferencesKeys.defaultLeaveMessage)
+				?? PreferencesKeys.defaultLeaveMessageFallback
+			effective = stored.isEmpty ? nil : stored
+		}
+		if let message = effective {
+			try await connection.send("PART \(channel) :\(message)")
 		} else {
 			try await connection.send("PART \(channel)")
 		}

@@ -38,4 +38,15 @@ public enum PreferencesKeys {
 	/// with other users on channels and in queries. Matches Halloy's
 	/// `buffer.typing.share`. Defaults to true. Receiving is always on.
 	public static let shareTypingEnabled = "brygga.shareTypingEnabled"
+
+	/// Default PART message appended to `/leave` / `/part` / Cmd+W when the
+	/// user doesn't supply one explicitly. Clear the field in Preferences
+	/// to opt out of sending any reason by default.
+	public static let defaultLeaveMessage = "brygga.defaultLeaveMessage"
+
+	/// Shipped default for `defaultLeaveMessage`. Both the `@AppStorage`
+	/// initial value in `GeneralPane` and the `UserDefaults` read site in
+	/// `IRCSession.part(_:reason:)` use this constant so they stay in sync.
+	public static let defaultLeaveMessageFallback =
+		"Brygga (https://github.com/buggerman/Brygga) - A modern, fast, feature-rich IRC client for macOS"
 }
