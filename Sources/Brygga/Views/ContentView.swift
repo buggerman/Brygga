@@ -108,6 +108,11 @@ struct ServerRow: View {
 				.frame(width: 8, height: 8)
 			Text(server.name)
 				.font(.system(size: 12, weight: .semibold))
+			if server.isAway {
+				Image(systemName: "moon.fill")
+					.font(.system(size: 9))
+					.foregroundStyle(.secondary)
+			}
 		}
 	}
 
@@ -285,6 +290,15 @@ struct ChatView: View {
 			// User-initiated — disable auto-reconnect and send QUIT cleanly.
 			let reason = rest.isEmpty ? nil : rest
 			Task { await session.disconnect(quitMessage: reason) }
+		case "AWAY":
+			let reason = rest.trimmingCharacters(in: .whitespaces)
+			if reason.isEmpty {
+				// Bare /away un-marks us.
+				Task { try? await session.connection.send("AWAY") }
+			} else {
+				session.server.awayMessage = reason
+				Task { try? await session.connection.send("AWAY :\(reason)") }
+			}
 		case "LIST":
 			// Clear prior listing and open the browser; the sheet's task will
 			// fire the LIST command against the server.
@@ -335,6 +349,13 @@ struct ServerConsoleHeader: View {
 				.font(.headline)
 			Text(server.host)
 				.foregroundStyle(.secondary)
+			if server.isAway {
+				Label(server.awayMessage.map { "away — \($0)" } ?? "away",
+				      systemImage: "moon.fill")
+					.labelStyle(.titleAndIcon)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
 			Spacer()
 			Text(server.nickname)
 				.foregroundStyle(.secondary)

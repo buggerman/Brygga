@@ -376,6 +376,15 @@ public final class IRCSession {
 			handleNamesReply(message)
 		case 366:
 			break
+		case 305:
+			// RPL_UNAWAY — we're no longer marked away.
+			server.isAway = false
+			server.awayMessage = nil
+			appendServerLog(message)
+		case 306:
+			// RPL_NOWAWAY — we've been marked away.
+			server.isAway = true
+			appendServerLog(message)
 		case 311: handleWhoisUser(message)
 		case 312: handleWhoisServer(message)
 		case 313: appendWhois(message, format: "is an IRC operator")
