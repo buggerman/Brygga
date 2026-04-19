@@ -157,6 +157,17 @@ public final class AppState {
 		ServerStore.save(snapshot())
 	}
 
+	/// Look up a channel across all servers by ID. Returns `nil` if the given
+	/// ID is a server row, a PM that no longer exists, or unknown.
+	public func channel(byID id: String) -> Channel? {
+		for server in servers {
+			if let ch = server.channels.first(where: { $0.id == id }) {
+				return ch
+			}
+		}
+		return nil
+	}
+
 	/// Convenience: the channel that's currently selected, if any.
 	public var selectedChannel: Channel? {
 		guard let id = selection else { return nil }

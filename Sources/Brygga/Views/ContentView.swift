@@ -196,8 +196,14 @@ struct ChatView: View {
 				}
 			}
 		}
-		.onChange(of: appState.selection) {
+		.onChange(of: appState.selection) { oldValue, _ in
 			draft = ""
+			// Snap the just-left channel's read marker to its current last
+			// message so returning later shows a "new" divider above anything
+			// that arrived in the interim.
+			if let oldID = oldValue, let leftChannel = appState.channel(byID: oldID) {
+				leftChannel.lastReadMessageID = leftChannel.messages.last?.id
+			}
 			if let channel = appState.selectedChannel {
 				channel.unreadCount = 0
 				channel.highlightCount = 0
@@ -482,13 +488,24 @@ struct MessageList: View {
 		}
 	}
 
+	private var markerIndex: Int? {
+		guard let markerID = channel.lastReadMessageID else { return nil }
+		let idx = visibleMessages.firstIndex(where: { $0.id == markerID })
+		// Only show the marker if there's at least one unread message after it.
+		guard let idx = idx, idx < visibleMessages.count - 1 else { return nil }
+		return idx
+	}
+
 	var body: some View {
 		ScrollViewReader { proxy in
 			ScrollView {
 				LazyVStack(alignment: .leading, spacing: 2) {
-					ForEach(visibleMessages) { message in
+					ForEach(Array(visibleMessages.enumerated()), id: \.element.id) { index, message in
 						MessageRow(message: message)
 							.id(message.id)
+						if markerIndex == index {
+							LineMarker()
+						}
 					}
 				}
 				.padding(12)
@@ -501,6 +518,25 @@ struct MessageList: View {
 				}
 			}
 		}
+	}
+}
+
+/// Horizontal divider showing where the user last read a channel. Appears
+/// between the last-seen message and the first unread one.
+struct LineMarker: View {
+	var body: some View {
+		HStack(spacing: 8) {
+			Rectangle()
+				.fill(Color.accentColor.opacity(0.6))
+				.frame(height: 1)
+			Text("new")
+				.font(.caption.weight(.medium))
+				.foregroundStyle(Color.accentColor)
+			Rectangle()
+				.fill(Color.accentColor.opacity(0.6))
+				.frame(height: 1)
+		}
+		.padding(.vertical, 4)
 	}
 }
 

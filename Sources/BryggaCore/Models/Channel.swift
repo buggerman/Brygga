@@ -18,6 +18,10 @@ public final class Channel: Identifiable {
 	public var unreadCount: Int = 0
 	public var highlightCount: Int = 0
 	public var isJoined: Bool = false
+	/// Message ID of the last message the user saw before navigating away.
+	/// MessageList uses this to render a "new" divider above the first
+	/// unread message when the user returns. Transient — not persisted.
+	public var lastReadMessageID: UUID?
 
 	public init(name: String) {
 		self.id = UUID().uuidString
