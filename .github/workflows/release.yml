@@ -5,11 +5,16 @@ on:
     branches:
       - main        # every commit publishes a rolling "nightly" prerelease
     paths-ignore:
-      # Docs-only pushes should not cut a new nightly DMG.
+      # Docs-only and GitHub-metadata pushes should not cut a new nightly DMG.
       - '**/*.md'
       - 'docs/**'
       - 'LICENSE*'
       - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/CODEOWNERS'
+      - '.github/FUNDING.yml'
+      - '.github/dependabot.yml'
     tags:
       - 'v*'        # explicit tag publishes a stable release (paths-ignore does not apply to tag pushes)
 
