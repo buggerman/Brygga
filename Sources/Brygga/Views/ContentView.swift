@@ -1742,15 +1742,25 @@ struct ChannelListSheet: View {
 	@Environment(AppState.self) private var appState
 	@Environment(\.dismiss) private var dismiss
 	@State private var filter: String = ""
+	/// Default: biggest channels first, so the noisy flagships surface
+	/// at the top on a freshly-loaded /LIST.
+	@State private var sortOrder: [KeyPathComparator<ChannelListing>] = [
+		KeyPathComparator(\.userCount, order: .reverse)
+	]
 
 	private var listings: [ChannelListing] {
 		let all = appState.selectedServer?.channelListing ?? []
-		guard !filter.isEmpty else { return all }
 		let needle = filter.lowercased()
-		return all.filter {
-			$0.name.lowercased().contains(needle) ||
-			$0.topic.lowercased().contains(needle)
+		let filtered: [ChannelListing]
+		if needle.isEmpty {
+			filtered = all
+		} else {
+			filtered = all.filter {
+				$0.name.lowercased().contains(needle) ||
+				$0.topic.lowercased().contains(needle)
+			}
 		}
+		return filtered.sorted(using: sortOrder)
 	}
 
 	var body: some View {
@@ -1774,18 +1784,18 @@ struct ChannelListSheet: View {
 				.padding(.horizontal, 20)
 				.padding(.bottom, 10)
 
-			Table(listings) {
-				TableColumn("Channel") { listing in
+			Table(listings, sortOrder: $sortOrder) {
+				TableColumn("Channel", value: \.name) { listing in
 					Text(listing.name).font(.system(.body, design: .monospaced))
 				}
 				.width(min: 120, ideal: 160)
 
-				TableColumn("Users") { listing in
-					Text("\(listing.userCount)")
+				TableColumn("Users", value: \.userCount) { listing in
+					Text("\(listing.userCount)").monospacedDigit()
 				}
 				.width(min: 60, ideal: 70)
 
-				TableColumn("Topic") { listing in
+				TableColumn("Topic", value: \.topic) { listing in
 					Text(listing.topic).lineLimit(1)
 				}
 
