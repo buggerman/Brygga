@@ -40,6 +40,12 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      - name: Lint formatting
+        run: swiftformat --lint .
+
       - name: Build
         run: swift build -v
 

@@ -29,10 +29,13 @@ Brygga is a native macOS IRC client written in pure Swift + SwiftUI. The goal is
 ```sh
 swift build                 # library + executable
 swift test                  # all tests must pass before commit
+swiftformat --lint .        # CI enforces this; run `swiftformat .` to fix
 ./Scripts/build-app.sh      # produces build/Brygga.app
 open build/Brygga.app       # launch with a Dock icon
 ./build/Brygga.app/Contents/MacOS/Brygga   # run inline to see stderr
 ```
+
+Install SwiftFormat once with `brew install swiftformat`. Config lives in `.swiftformat` at the repo root.
 
 ## Architecture invariants (do not violate)
 
