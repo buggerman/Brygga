@@ -149,6 +149,7 @@ Other on-disk state:
 - **Stable**: manual `v*` tag push. `github.com/buggerman/Brygga/releases/latest` surfaces the newest one via GitHub's built-in "Latest release" badge.
 - **Nightly**: rolling prerelease at tag `nightly`, rebuilt on every push to `main`. Tag is deleted and recreated per push so the URL is always current. Includes the 7-char commit SHA in the release title for traceability.
 - Both DMGs are ad-hoc codesigned (`codesign --sign -`). First launch needs right-click → Open; if Gatekeeper still refuses, `xattr -cr /Applications/Brygga.app` clears the quarantine attribute. Proper Developer-ID notarization is out of scope.
+- **Homebrew tap**: `buggerman/homebrew-brygga` hosts two casks (`brygga` stable, `brygga@nightly` rolling). When a `v*` tag is pushed, `release.yml` auto-bumps `Casks/brygga.rb` (version + sha256) in the tap. Requires repo secret `TAP_REPO_TOKEN` — a fine-grained PAT scoped to `buggerman/homebrew-brygga` with **Contents: Read and write**. If the secret is missing the step logs a warning and the release still publishes; the cask just won't bump until a human pushes it manually.
 
 ## What not to do
 

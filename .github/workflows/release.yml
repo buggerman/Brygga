@@ -148,6 +148,50 @@ jobs:
           gh release delete nightly --yes --cleanup-tag || true
           gh release delete latest --yes --cleanup-tag || true
 
+      - name: Bump Homebrew tap (stable releases only)
+        if: steps.params.outputs.rolling == 'false'
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
+          VERSION: ${{ steps.params.outputs.version }}
+          TAG: ${{ steps.params.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::warning::TAP_REPO_TOKEN not configured; skipping Homebrew bump"
+            exit 0
+          fi
+
+          DMG="dist/Brygga-${TAG}.dmg"
+          SHA256="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+          echo "Bumping buggerman/homebrew-brygga :: brygga to ${VERSION} (sha256=${SHA256})"
+
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/buggerman/homebrew-brygga.git" tap
+          cd tap
+
+          CASK=Casks/brygga.rb
+
+          # BSD sed on macos-26. Anchor to line start and exact field names so
+          # we only touch the two lines we mean to.
+          sed -i '' -E "s|^  version \"[^\"]*\"\$|  version \"${VERSION}\"|" "$CASK"
+          sed -i '' -E "s|^  sha256 \"[0-9a-f]*\"\$|  sha256 \"${SHA256}\"|" "$CASK"
+
+          # Verify both edits landed; otherwise fail loud rather than pushing a
+          # half-edited cask.
+          grep -qE "^  version \"${VERSION}\"\$" "$CASK" || { echo "::error::version bump failed for $CASK"; exit 1; }
+          grep -qE "^  sha256 \"${SHA256}\"\$" "$CASK" || { echo "::error::sha256 bump failed for $CASK"; exit 1; }
+
+          if git diff --quiet; then
+            echo "Cask already at ${VERSION} / ${SHA256} — nothing to push"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$CASK"
+          git commit -m "Bump brygga to ${VERSION}"
+          git push origin main
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
