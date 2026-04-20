@@ -49,7 +49,7 @@ public final class Server: Identifiable {
 		useTLS: Bool = true,
 		nickname: String,
 		saslAccount: String? = nil,
-		saslPassword: String? = nil
+		saslPassword: String? = nil,
 	) {
 		// Accept a caller-supplied id so `AppState.restoreFromStore` can
 		// rebind a server to its previous-launch UUID, which the
@@ -69,14 +69,14 @@ public final class Server: Identifiable {
 		case disconnected
 		case connecting
 		case connected
-		case registered   // successful USER/NICK + welcome
+		case registered // successful USER/NICK + welcome
 		case disconnecting
 	}
 
 	public var isActive: Bool {
 		switch state {
-		case .connected, .registered: return true
-		default: return false
+		case .connected, .registered: true
+		default: false
 		}
 	}
 }
@@ -89,7 +89,7 @@ public struct ChannelListing: Identifiable, Sendable, Equatable {
 	public let topic: String
 
 	public init(name: String, userCount: Int, topic: String) {
-		self.id = UUID()
+		id = UUID()
 		self.name = name
 		self.userCount = userCount
 		self.topic = topic

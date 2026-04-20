@@ -12,14 +12,13 @@ import Foundation
 /// in Console.app under User Reports). Logs previously written to
 /// `~/Documents/Brygga Logs/` are migrated on first construction.
 public actor DiskLogger {
-
 	public static let shared = DiskLogger()
 
 	private let root: URL
 	private nonisolated let tsFormatter: DateFormatter
 
 	public init(root: URL? = nil) {
-		if let root = root {
+		if let root {
 			self.root = root
 		} else {
 			let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
@@ -35,7 +34,7 @@ public actor DiskLogger {
 		f.dateFormat = "yyyy-MM-dd HH:mm:ss"
 		f.locale = Locale(identifier: "en_US_POSIX")
 		f.timeZone = TimeZone.current
-		self.tsFormatter = f
+		tsFormatter = f
 	}
 
 	/// One-time move of logs from the pre-0.1.1 `~/Documents/Brygga Logs/`

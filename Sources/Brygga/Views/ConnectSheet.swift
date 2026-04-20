@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import SwiftUI
 import BryggaCore
+import SwiftUI
 
 @MainActor
 struct ConnectSheet: View {
@@ -30,12 +30,14 @@ struct ConnectSheet: View {
 		return stored.isEmpty ? NSUserName() : stored
 	}
 
-	private var port: UInt16? { UInt16(portText) }
+	private var port: UInt16? {
+		UInt16(portText)
+	}
 
 	private var canSubmit: Bool {
 		!host.trimmingCharacters(in: .whitespaces).isEmpty &&
-		!nickname.trimmingCharacters(in: .whitespaces).isEmpty &&
-		port != nil
+			!nickname.trimmingCharacters(in: .whitespaces).isEmpty &&
+			port != nil
 	}
 
 	var body: some View {
@@ -124,7 +126,7 @@ struct ConnectSheet: View {
 	}
 
 	private func submit() {
-		guard let port = port else { return }
+		guard let port else { return }
 		let trimmedAccount = saslAccount.trimmingCharacters(in: .whitespaces)
 		let account = trimmedAccount.isEmpty ? nil : trimmedAccount
 		let password = saslPassword.isEmpty ? nil : saslPassword
@@ -140,7 +142,7 @@ struct ConnectSheet: View {
 			saslAccount: account,
 			saslPassword: password,
 			clientCertificatePath: effectiveCertPath,
-			clientCertificatePassphrase: effectiveCertPassphrase
+			clientCertificatePassphrase: effectiveCertPassphrase,
 		)
 		dismiss()
 	}

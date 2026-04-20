@@ -15,7 +15,6 @@ import Security
 /// `AppState` handles read-through, write-through, and legacy-JSON
 /// migration — callers outside that file shouldn't need this API.
 public enum KeychainStore {
-
 	public enum Field: String {
 		case saslPassword
 		case certificatePassphrase
@@ -49,7 +48,7 @@ public enum KeychainStore {
 		]
 		let updateStatus = SecItemUpdate(
 			query as CFDictionary,
-			[kSecValueData as String: data] as CFDictionary
+			[kSecValueData as String: data] as CFDictionary,
 		)
 		if updateStatus == errSecSuccess { return true }
 		guard updateStatus == errSecItemNotFound else { return false }

@@ -21,7 +21,6 @@ public struct IRCLineParserResult: Sendable, Equatable {
 ///
 /// Line format: [@tags] [:prefix] <command> [params...] [:trailing]
 public enum IRCLineParser {
-
 	/// Parse a raw IRC protocol line into its components.
 	/// Returns nil if the line is malformed (empty command, etc.)
 	public static func parse(_ line: String) -> IRCLineParserResult? {
@@ -34,7 +33,7 @@ public enum IRCLineParser {
 		if remainder.hasPrefix("@") {
 			guard let spaceIndex = remainder.firstIndex(of: " ") else { return nil }
 
-			let tagString = remainder[remainder.index(after: remainder.startIndex)..<spaceIndex]
+			let tagString = remainder[remainder.index(after: remainder.startIndex) ..< spaceIndex]
 			tags = parseTags(tagString)
 
 			remainder = remainder[spaceIndex...].drop(while: { $0 == " " })
@@ -45,7 +44,7 @@ public enum IRCLineParser {
 		if remainder.hasPrefix(":") {
 			guard let spaceIndex = remainder.firstIndex(of: " ") else { return nil }
 
-			senderString = String(remainder[remainder.index(after: remainder.startIndex)..<spaceIndex])
+			senderString = String(remainder[remainder.index(after: remainder.startIndex) ..< spaceIndex])
 
 			if senderString?.isEmpty ?? true { return nil }
 
@@ -108,7 +107,7 @@ public enum IRCLineParser {
 			senderNickname: nickname,
 			senderUsername: username,
 			senderAddress: address,
-			senderIsServer: isServer
+			senderIsServer: isServer,
 		)
 	}
 
@@ -172,12 +171,13 @@ public enum IRCLineParser {
 		}
 
 		guard let atIndex = hostmask.lastIndex(of: "@"),
-			  atIndex > bangIndex else {
+		      atIndex > bangIndex
+		else {
 			return (nickname: hostmask, username: nil, address: nil, isServer: true)
 		}
 
 		let nick = String(hostmask[..<bangIndex])
-		let user = String(hostmask[hostmask.index(after: bangIndex)..<atIndex])
+		let user = String(hostmask[hostmask.index(after: bangIndex) ..< atIndex])
 		let host = String(hostmask[hostmask.index(after: atIndex)...])
 
 		guard !nick.isEmpty, !user.isEmpty, !host.isEmpty else {

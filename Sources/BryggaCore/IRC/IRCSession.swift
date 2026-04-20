@@ -13,7 +13,6 @@ import Foundation
 /// Runs on the main actor so SwiftUI observation works without hops.
 @MainActor
 public final class IRCSession {
-
 	public let server: Server
 	public let connection: IRCConnection
 
@@ -64,16 +63,16 @@ public final class IRCSession {
 		guard runTask == nil else { return }
 
 		let stateTask = Task { @MainActor [weak self] in
-			guard let self = self else { return }
-			for await state in self.connection.stateChanges {
-				self.syncState(state)
+			guard let self else { return }
+			for await state in connection.stateChanges {
+				syncState(state)
 			}
 		}
 
 		let messageTask = Task { @MainActor [weak self] in
-			guard let self = self else { return }
-			for await message in self.connection.messages {
-				self.handle(message)
+			guard let self else { return }
+			for await message in connection.messages {
+				handle(message)
 			}
 		}
 
@@ -109,16 +108,16 @@ public final class IRCSession {
 		reconnectTask?.cancel()
 		reconnectTask = nil
 		Task { [weak self] in
-			guard let self = self else { return }
+			guard let self else { return }
 			do {
-				try await self.connection.connect()
+				try await connection.connect()
 			} catch {
-				self.recordServer(Message(
+				recordServer(Message(
 					sender: "**",
 					content: "reconnect failed: \(error)",
-					kind: .server
+					kind: .server,
 				))
-				self.scheduleReconnectIfNeeded()
+				scheduleReconnectIfNeeded()
 			}
 		}
 	}
@@ -205,10 +204,10 @@ public final class IRCSession {
 	private func safeBodyLimit(for target: String) -> Int {
 		let nick = server.nickname
 		let user = connection.username
-		let hostnameAssumed = 70   // conservative max; most cloaks are ~25
+		let hostnameAssumed = 70 // conservative max; most cloaks are ~25
 		let prefixBytes = 1 + nick.utf8.count + 1 + user.utf8.count + 1 + hostnameAssumed + 1
 		let commandBytes = "PRIVMSG ".utf8.count + target.utf8.count + " :".utf8.count
-		let trailerBytes = 2   // \r\n
+		let trailerBytes = 2 // \r\n
 		let budget = 512 - prefixBytes - commandBytes - trailerBytes
 		return max(budget, 50)
 	}
@@ -290,22 +289,22 @@ public final class IRCSession {
 
 		switch message.command {
 		case "PRIVMSG": handlePrivmsg(message)
-		case "TAGMSG":  handleTagmsg(message)
-		case "PONG":    handlePong(message)
-		case "NOTICE":  handleNotice(message)
-		case "JOIN":    handleJoin(message)
-		case "MODE":    handleMode(message)
-		case "PART":    handlePart(message)
-		case "QUIT":    handleQuit(message)
-		case "NICK":    handleNick(message)
-		case "TOPIC":   handleTopic(message)
-		case "KICK":    handleKick(message)
-		case "INVITE":  handleInvite(message)
+		case "TAGMSG": handleTagmsg(message)
+		case "PONG": handlePong(message)
+		case "NOTICE": handleNotice(message)
+		case "JOIN": handleJoin(message)
+		case "MODE": handleMode(message)
+		case "PART": handlePart(message)
+		case "QUIT": handleQuit(message)
+		case "NICK": handleNick(message)
+		case "TOPIC": handleTopic(message)
+		case "KICK": handleKick(message)
+		case "INVITE": handleInvite(message)
 		case "CHGHOST": handleChghost(message)
 		case "ACCOUNT": handleAccount(message)
-		case "AWAY":    handleAway(message)
-		case "BATCH":   break  // IRCv3 batches — ignored for now, messages flow through normally
-		case "CAP":     break  // CAP traffic is handled in IRCConnection; suppress server-log noise here
+		case "AWAY": handleAway(message)
+		case "BATCH": break // IRCv3 batches — ignored for now, messages flow through normally
+		case "CAP": break // CAP traffic is handled in IRCConnection; suppress server-log noise here
 		default:
 			// Surface unhandled protocol traffic in the server console so users
 			// can see what the server is saying.
@@ -373,19 +372,19 @@ public final class IRCSession {
 
 	private static func formatLogLine(_ msg: Message) -> String {
 		switch msg.kind {
-		case .privmsg:       return "<\(msg.sender)> \(msg.content)"
-		case .action:        return "* \(msg.sender) \(msg.content)"
-		case .notice:        return "-\(msg.sender)- \(msg.content)"
+		case .privmsg: return "<\(msg.sender)> \(msg.content)"
+		case .action: return "* \(msg.sender) \(msg.content)"
+		case .notice: return "-\(msg.sender)- \(msg.content)"
 		case .server:
 			let sender = msg.sender.isEmpty ? "" : "\(msg.sender) "
 			return "-- \(sender)\(msg.content)"
-		case .join:          return "* \(msg.sender) \(msg.content)"
-		case .part:          return "* \(msg.sender) \(msg.content)"
-		case .quit:          return "* \(msg.sender) \(msg.content)"
-		case .nick:          return "* \(msg.sender) \(msg.content)"
-		case .kick:          return "* \(msg.content)"
-		case .topic:         return "* \(msg.sender) changed topic to: \(msg.content)"
-		case .mode:          return "* \(msg.sender) \(msg.content)"
+		case .join: return "* \(msg.sender) \(msg.content)"
+		case .part: return "* \(msg.sender) \(msg.content)"
+		case .quit: return "* \(msg.sender) \(msg.content)"
+		case .nick: return "* \(msg.sender) \(msg.content)"
+		case .kick: return "* \(msg.content)"
+		case .topic: return "* \(msg.sender) changed topic to: \(msg.content)"
+		case .mode: return "* \(msg.sender) \(msg.content)"
 		}
 	}
 
@@ -416,7 +415,7 @@ public final class IRCSession {
 		recordServer(Message(
 			sender: "**",
 			content: "connection lost — reconnecting in \(seconds)s (attempt \(reconnectAttempt))",
-			kind: .server
+			kind: .server,
 		))
 		reconnectTask = Task { [weak self] in
 			try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
@@ -434,7 +433,7 @@ public final class IRCSession {
 			recordServer(Message(
 				sender: "**",
 				content: "reconnect failed: \(error)",
-				kind: .server
+				kind: .server,
 			))
 			scheduleReconnectIfNeeded()
 		}
@@ -507,7 +506,7 @@ public final class IRCSession {
 			server.channelListing.append(ChannelListing(
 				name: name,
 				userCount: count,
-				topic: topic
+				topic: topic,
 			))
 		case 323:
 			// RPL_LISTEND — sort by user count descending.
@@ -566,7 +565,7 @@ public final class IRCSession {
 			sender: sender,
 			content: content,
 			kind: kind,
-			isHighlight: isHighlight
+			isHighlight: isHighlight,
 		)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
@@ -681,8 +680,8 @@ public final class IRCSession {
 		notifyPollTask = Task { [weak self] in
 			while !Task.isCancelled {
 				try? await Task.sleep(nanoseconds: UInt64(Self.notifyPollInterval * 1_000_000_000))
-				guard let self = self, !Task.isCancelled else { return }
-				await self.sendNotifyPoll()
+				guard let self, !Task.isCancelled else { return }
+				await sendNotifyPoll()
 			}
 		}
 		// Fire one immediate poll so we don't wait 60s to see initial status.
@@ -712,7 +711,7 @@ public final class IRCSession {
 
 		// Original-case lookup for display.
 		let byLower: [String: String] = Dictionary(
-			uniqueKeysWithValues: server.notifyList.map { ($0.lowercased(), $0) }
+			uniqueKeysWithValues: server.notifyList.map { ($0.lowercased(), $0) },
 		)
 
 		let justCameOn = effective.subtracting(notifyOnline).sorted()
@@ -763,7 +762,7 @@ public final class IRCSession {
 			let lcEntry = entry.lowercased()
 			let isGlob = lcEntry.contains("*") || lcEntry.contains("!") || lcEntry.contains("@")
 			if isGlob {
-				if let lcMask = lcMask, Self.globMatch(pattern: lcEntry, input: lcMask) {
+				if let lcMask, Self.globMatch(pattern: lcEntry, input: lcMask) {
 					return true
 				}
 			} else if lcEntry == lcNick {
@@ -814,7 +813,8 @@ public final class IRCSession {
 		let key = sender.lowercased()
 		let now = Date()
 		if let last = ctcpReplyCooldown[key],
-		   now.timeIntervalSince(last) < Self.ctcpCooldownInterval {
+		   now.timeIntervalSince(last) < Self.ctcpCooldownInterval
+		{
 			return
 		}
 
@@ -837,7 +837,7 @@ public final class IRCSession {
 			reply = nil
 		}
 
-		guard let reply = reply else { return }
+		guard let reply else { return }
 		ctcpReplyCooldown[key] = now
 
 		// Breadcrumb in the server console so the user can see that their
@@ -845,7 +845,7 @@ public final class IRCSession {
 		recordServer(Message(
 			sender: sender,
 			content: "CTCP \(command) — replied",
-			kind: .server
+			kind: .server,
 		))
 
 		let payload = "\u{0001}\(command) \(reply)\u{0001}"
@@ -865,7 +865,7 @@ public final class IRCSession {
 			timestamp: messageTimestamp(message),
 			sender: target,
 			content: content,
-			kind: .server
+			kind: .server,
 		))
 	}
 
@@ -956,7 +956,7 @@ public final class IRCSession {
 			timestamp: messageTimestamp(message),
 			sender: inviter,
 			content: "invited you to \(channelName)",
-			kind: .server
+			kind: .server,
 		))
 
 		if UserDefaults.standard.bool(forKey: PreferencesKeys.autoJoinOnInvite) {
@@ -1053,11 +1053,11 @@ public final class IRCSession {
 		stopPingLoop()
 		pingTask = Task { @MainActor [weak self] in
 			while let self, !Task.isCancelled {
-				guard self.server.isActive else { return }
+				guard server.isActive else { return }
 				let token = "bryggaping\(Int(Date().timeIntervalSince1970 * 1000))"
-				self.pendingPings[token] = Date()
-				self.server.lastPingAt = Date()
-				try? await self.connection.send("PING :\(token)")
+				pendingPings[token] = Date()
+				server.lastPingAt = Date()
+				try? await connection.send("PING :\(token)")
 				try? await Task.sleep(nanoseconds: 30_000_000_000)
 			}
 		}
@@ -1138,7 +1138,7 @@ public final class IRCSession {
 			timestamp: messageTimestamp(message),
 			sender: sender,
 			content: body,
-			kind: .notice
+			kind: .notice,
 		)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
@@ -1202,7 +1202,7 @@ public final class IRCSession {
 			recordServer(Message(
 				sender: "**",
 				content: "\(setter) sets mode \(modeString) on \(target)",
-				kind: .mode
+				kind: .mode,
 			))
 			return
 		}
@@ -1251,9 +1251,9 @@ public final class IRCSession {
 			Message(
 				sender: setter,
 				content: "sets mode: \(summary)",
-				kind: .mode
+				kind: .mode,
 			),
-			in: channel
+			in: channel,
 		)
 	}
 
@@ -1366,9 +1366,10 @@ public final class IRCSession {
 			var hostname: String?
 			if let bangIdx = rest.firstIndex(of: "!"),
 			   let atIdx = rest.firstIndex(of: "@"),
-			   bangIdx < atIdx {
+			   bangIdx < atIdx
+			{
 				nick = String(rest[..<bangIdx])
-				username = String(rest[rest.index(after: bangIdx)..<atIdx])
+				username = String(rest[rest.index(after: bangIdx) ..< atIdx])
 				hostname = String(rest[rest.index(after: atIdx)...])
 			} else {
 				nick = rest

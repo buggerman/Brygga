@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import SwiftUI
 import AppKit
 import BryggaCore
+import SwiftUI
 
 /// The root Preferences window, wired from `BryggaApp`'s `Settings` scene.
 struct PreferencesView: View {
@@ -68,7 +68,7 @@ struct GeneralPane: View {
 			}
 			Section {
 				TextField("Default leave message", text: $defaultLeaveMessage, axis: .vertical)
-					.lineLimit(2...4)
+					.lineLimit(2 ... 4)
 			} footer: {
 				Text("Appended to `/leave`, `/part`, and Cmd+W when you don't supply your own reason. Clear the field to leave without any reason.")
 					.font(.caption)
@@ -90,9 +90,9 @@ struct IdentityPane: View {
 	var body: some View {
 		Form {
 			Section {
-				TextField("Nickname",  text: $defaultNickname,  prompt: Text(NSUserName()))
-				TextField("User name", text: $defaultUserName,  prompt: Text("same as nickname"))
-				TextField("Real name", text: $defaultRealName,  prompt: Text("optional"))
+				TextField("Nickname", text: $defaultNickname, prompt: Text(NSUserName()))
+				TextField("User name", text: $defaultUserName, prompt: Text("same as nickname"))
+				TextField("Real name", text: $defaultRealName, prompt: Text("optional"))
 			} header: {
 				Text("Default identity")
 			} footer: {
@@ -208,7 +208,7 @@ struct IgnorePane: View {
 				ContentUnavailableView(
 					"No server selected",
 					systemImage: "server.rack",
-					description: Text("Add a server first, or pick one from the menu above.")
+					description: Text("Add a server first, or pick one from the menu above."),
 				)
 				Spacer()
 			}
@@ -260,7 +260,7 @@ struct LoggingPane: View {
 					Button("Reveal in Finder") {
 						try? FileManager.default.createDirectory(
 							at: logFolder,
-							withIntermediateDirectories: true
+							withIntermediateDirectories: true,
 						)
 						NSWorkspace.shared.activateFileViewerSelecting([logFolder])
 					}
@@ -289,7 +289,7 @@ struct ServersPane: View {
 				ContentUnavailableView(
 					"No servers",
 					systemImage: "server.rack",
-					description: Text("Use Server → New Server\u{2026} in the main window to add one.")
+					description: Text("Use Server → New Server\u{2026} in the main window to add one."),
 				)
 				Spacer()
 			} else {

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 @MainActor
 final class IRCSessionTests: XCTestCase {
-
 	private func makeSession(ownNick: String = "me") -> IRCSession {
 		let server = Server(name: "Test", host: "irc.example.org", nickname: ownNick)
 		let connection = IRCConnection(host: "irc.example.org", nickname: ownNick)

@@ -33,7 +33,7 @@ public final class Channel: Identifiable {
 	public var scrollbackLoaded: Bool = false
 
 	public init(name: String) {
-		self.id = UUID().uuidString
+		id = UUID().uuidString
 		self.name = name
 	}
 
@@ -48,13 +48,13 @@ public final class User: Identifiable {
 	public var nickname: String
 	public var username: String?
 	public var hostname: String?
-	public var account: String?             // IRCv3 account-notify / account-tag
-	public var modes: Set<Character> = []   // o, h, v, q, a
+	public var account: String? // IRCv3 account-notify / account-tag
+	public var modes: Set<Character> = [] // o, h, v, q, a
 	public var isAway: Bool = false
 	public var awayMessage: String?
 
 	public init(nickname: String) {
-		self.id = nickname.lowercased()
+		id = nickname.lowercased()
 		self.nickname = nickname
 	}
 
@@ -81,9 +81,9 @@ public struct Message: Identifiable, Sendable, Codable {
 		sender: String,
 		content: String,
 		kind: Kind,
-		isHighlight: Bool = false
+		isHighlight: Bool = false,
 	) {
-		self.id = UUID()
+		id = UUID()
 		self.timestamp = timestamp
 		self.sender = sender
 		self.content = content
@@ -97,18 +97,18 @@ public struct Message: Identifiable, Sendable, Codable {
 
 	public init(from decoder: Decoder) throws {
 		let c = try decoder.container(keyedBy: CodingKeys.self)
-		self.id = try c.decode(UUID.self, forKey: .id)
-		self.timestamp = try c.decode(Date.self, forKey: .timestamp)
-		self.sender = try c.decode(String.self, forKey: .sender)
-		self.content = try c.decode(String.self, forKey: .content)
-		self.kind = try c.decode(Kind.self, forKey: .kind)
-		self.isHighlight = try c.decodeIfPresent(Bool.self, forKey: .isHighlight) ?? false
+		id = try c.decode(UUID.self, forKey: .id)
+		timestamp = try c.decode(Date.self, forKey: .timestamp)
+		sender = try c.decode(String.self, forKey: .sender)
+		content = try c.decode(String.self, forKey: .content)
+		kind = try c.decode(Kind.self, forKey: .kind)
+		isHighlight = try c.decodeIfPresent(Bool.self, forKey: .isHighlight) ?? false
 	}
 
 	public enum Kind: String, Sendable, Codable {
 		case privmsg
 		case notice
-		case action       // /me
+		case action // /me
 		case join
 		case part
 		case quit
@@ -116,6 +116,6 @@ public struct Message: Identifiable, Sendable, Codable {
 		case kick
 		case topic
 		case mode
-		case server       // server notice / numeric
+		case server // server notice / numeric
 	}
 }

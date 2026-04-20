@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 @MainActor
 final class AppStateNavigationTests: XCTestCase {
-
 	private func makeFixture() -> AppState {
 		let state = AppState()
 		state.servers.removeAll()

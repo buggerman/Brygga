@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 class IRCLineParserTests: XCTestCase {
-
 	// MARK: - Basic Commands
 
 	func testPRIVMSG() {

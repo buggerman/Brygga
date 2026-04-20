@@ -10,7 +10,6 @@ import Foundation
 /// is scheduled onto this actor, so message order is preserved without
 /// blocking the main actor.
 public actor ScrollbackStore {
-
 	public static let shared = ScrollbackStore()
 
 	private let root: URL
@@ -19,7 +18,7 @@ public actor ScrollbackStore {
 
 	public init(root: URL? = nil) {
 		let base: URL
-		if let root = root {
+		if let root {
 			base = root
 		} else {
 			let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -31,11 +30,11 @@ public actor ScrollbackStore {
 
 		let enc = JSONEncoder()
 		enc.dateEncodingStrategy = .iso8601
-		self.encoder = enc
+		encoder = enc
 
 		let dec = JSONDecoder()
 		dec.dateDecodingStrategy = .iso8601
-		self.decoder = dec
+		decoder = dec
 	}
 
 	/// Append a single message to the log for `target` under `serverId`.
@@ -62,7 +61,8 @@ public actor ScrollbackStore {
 	public func load(serverId: String, target: String, limit: Int = 500) -> [Message] {
 		guard let url = try? fileURL(serverId: serverId, target: target),
 		      FileManager.default.fileExists(atPath: url.path),
-		      let data = try? Data(contentsOf: url) else {
+		      let data = try? Data(contentsOf: url)
+		else {
 			return []
 		}
 		let lines = data.split(separator: 0x0A)

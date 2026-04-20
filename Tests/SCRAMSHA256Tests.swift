@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 final class SCRAMSHA256Tests: XCTestCase {
-
 	func testRFC7677Exchange() throws {
 		// RFC 7677 §3 SCRAM-SHA-256 example.
 		let clientNonce = "rOprNGfwEbeRWgbNEkqO"
@@ -30,7 +29,7 @@ final class SCRAMSHA256Tests: XCTestCase {
 		var client = SCRAMSHA256Client(username: "u", password: "p", clientNonce: "ABC")
 		_ = client.clientFirstMessage()
 		XCTAssertThrowsError(try client.clientFinalMessage(
-			serverFirst: "r=ZZZ,s=QUJD,i=4096"
+			serverFirst: "r=ZZZ,s=QUJD,i=4096",
 		)) { error in
 			XCTAssertEqual(error as? SCRAMSHA256Client.SCRAMError, .nonceMismatch)
 		}
@@ -63,7 +62,7 @@ final class SCRAMSHA256Tests: XCTestCase {
 			password: "pencil",
 			salt: salt,
 			iterations: 4096,
-			keyLength: 32
+			keyLength: 32,
 		)
 		XCTAssertEqual(derived.count, 32)
 		XCTAssertFalse(derived.allSatisfy { $0 == 0 })

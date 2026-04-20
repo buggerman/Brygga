@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Brygga contributors
 
 import Foundation
-import Security
 import Network
+import Security
 
 /// Errors produced while loading a PKCS#12 client certificate for SASL EXTERNAL.
 public enum ClientIdentityError: Error, Equatable {
@@ -27,7 +27,7 @@ public enum ClientIdentity {
 
 		var items: CFArray?
 		let options: [String: Any] = [
-			kSecImportExportPassphrase as String: passphrase ?? ""
+			kSecImportExportPassphrase as String: passphrase ?? "",
 		]
 		let status = SecPKCS12Import(data as CFData, options as CFDictionary, &items)
 		guard status == errSecSuccess,

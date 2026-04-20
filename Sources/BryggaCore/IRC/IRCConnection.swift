@@ -9,7 +9,6 @@ import Network
 /// Thread-safe by construction (actor). Uses Network.framework with async/await
 /// and exposes parsed incoming messages via an `AsyncStream<IRCLineParserResult>`.
 public actor IRCConnection {
-
 	// MARK: - Configuration
 
 	public nonisolated let host: String
@@ -31,8 +30,8 @@ public actor IRCConnection {
 	public enum State: Sendable, Equatable {
 		case disconnected
 		case connecting
-		case registering  // connected at TCP, waiting for 001 (welcome)
-		case active       // welcome received
+		case registering // connected at TCP, waiting for 001 (welcome)
+		case active // welcome received
 		case disconnecting
 		case failed(String)
 	}
@@ -72,7 +71,7 @@ public actor IRCConnection {
 		saslAccount: String? = nil,
 		saslPassword: String? = nil,
 		clientCertificatePath: String? = nil,
-		clientCertificatePassphrase: String? = nil
+		clientCertificatePassphrase: String? = nil,
 	) {
 		self.host = host
 		self.port = port
@@ -86,16 +85,16 @@ public actor IRCConnection {
 		self.clientCertificatePassphrase = clientCertificatePassphrase
 
 		var msgContinuation: AsyncStream<IRCLineParserResult>.Continuation!
-		self.messages = AsyncStream { continuation in
+		messages = AsyncStream { continuation in
 			msgContinuation = continuation
 		}
-		self.messageContinuation = msgContinuation
+		messageContinuation = msgContinuation
 
 		var stateCont: AsyncStream<State>.Continuation!
-		self.stateChanges = AsyncStream { continuation in
+		stateChanges = AsyncStream { continuation in
 			stateCont = continuation
 		}
-		self.stateContinuation = stateCont
+		stateContinuation = stateCont
 	}
 
 	deinit {
@@ -112,7 +111,7 @@ public actor IRCConnection {
 	public func connect() async throws {
 		switch state {
 		case .disconnected, .failed:
-			break  // reconnect OK from these states
+			break // reconnect OK from these states
 		default:
 			throw ConnectionError.invalidState("cannot connect from \(state)")
 		}
@@ -134,11 +133,11 @@ public actor IRCConnection {
 				do {
 					let identity = try ClientIdentity.load(
 						path: certPath,
-						passphrase: clientCertificatePassphrase
+						passphrase: clientCertificatePassphrase,
 					)
 					sec_protocol_options_set_local_identity(
 						tlsOptions.securityProtocolOptions,
-						identity
+						identity,
 					)
 				} catch {
 					setState(.failed("client cert load failed: \(error)"))
@@ -156,7 +155,7 @@ public actor IRCConnection {
 		}
 
 		let conn = NWConnection(host: endpointHost, port: endpointPort, using: parameters)
-		self.connection = conn
+		connection = conn
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
 			let resumer = SingleShotResumer(continuation: continuation)
@@ -166,7 +165,7 @@ public actor IRCConnection {
 				case .ready:
 					resumer.resume(.success(()))
 					Task { [weak self] in await self?.onReady() }
-				case .failed(let error):
+				case let .failed(error):
 					let reason = error.localizedDescription
 					resumer.resume(.failure(ConnectionError.networkFailed(reason)))
 					Task { [weak self] in await self?.onFailed(reason) }
@@ -203,7 +202,7 @@ public actor IRCConnection {
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
 			conn.send(content: payload, completion: .contentProcessed { error in
-				if let error = error {
+				if let error {
 					continuation.resume(throwing: ConnectionError.networkFailed(error.localizedDescription))
 				} else {
 					continuation.resume()
@@ -220,7 +219,7 @@ public actor IRCConnection {
 	private static let rateRefillPerSec: Double = 300
 
 	private var rateTokens: Double = rateMaxTokens
-	private var rateLastRefill: Date = Date()
+	private var rateLastRefill: Date = .init()
 
 	private func acquireTokens(_ count: Int) async {
 		let need = Double(count)
@@ -374,9 +373,9 @@ public actor IRCConnection {
 	private func receiveChunk(_ conn: NWConnection) async throws -> Data? {
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
 			conn.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, isComplete, error in
-				if let error = error {
+				if let error {
 					continuation.resume(throwing: error)
-				} else if isComplete, (data == nil || data?.isEmpty == true) {
+				} else if isComplete, data == nil || data?.isEmpty == true {
 					continuation.resume(returning: nil)
 				} else {
 					continuation.resume(returning: data)
@@ -389,13 +388,14 @@ public actor IRCConnection {
 		// Split on \n and tolerate bare \r by trimming it.
 		while let range = receiveBuffer.firstRange(of: Data([0x0A])) {
 			var line = receiveBuffer[..<range.lowerBound]
-			if line.last == 0x0D {  // trim trailing \r
+			if line.last == 0x0D { // trim trailing \r
 				line = line.dropLast()
 			}
 			receiveBuffer.removeSubrange(..<range.upperBound)
 
 			guard let text = String(data: Data(line), encoding: .utf8)
-				?? String(data: Data(line), encoding: .isoLatin1) else {
+				?? String(data: Data(line), encoding: .isoLatin1)
+			else {
 				continue
 			}
 
@@ -421,7 +421,7 @@ public actor IRCConnection {
 				// Post-registration CAP NEW / CAP DEL always tracked.
 				handleCapUpdate(parsed)
 				// Registration complete when 001 (RPL_WELCOME) arrives.
-				if parsed.commandNumeric == 1 && state == .registering {
+				if parsed.commandNumeric == 1, state == .registering {
 					setState(.active)
 				}
 				messageContinuation.yield(parsed)
@@ -522,7 +522,8 @@ public actor IRCConnection {
 			}
 			// Base64-decode the server's payload and route by step.
 			guard let decoded = Data(base64Encoded: payload),
-			      let serverMessage = String(data: decoded, encoding: .utf8) else {
+			      let serverMessage = String(data: decoded, encoding: .utf8)
+			else {
 				abortSasl()
 				return
 			}
@@ -562,11 +563,12 @@ public actor IRCConnection {
 			.map { String($0) }
 		enabledCaps.formUnion(acked)
 
-		if enabledCaps.contains("sasl") && useSasl {
+		if enabledCaps.contains("sasl"), useSasl {
 			let mech = preferredSaslMechanism()
 			saslMechanism = mech
 			if mech == "SCRAM-SHA-256",
-			   let account = saslAccount, let password = saslPassword {
+			   let account = saslAccount, let password = saslPassword
+			{
 				scramClient = SCRAMSHA256Client(username: account, password: password)
 			}
 			Task { [weak self] in try? await self?.send("AUTHENTICATE \(mech)") }
@@ -581,7 +583,7 @@ public actor IRCConnection {
 	/// advertised no mechanism list.
 	private func preferredSaslMechanism() -> String {
 		let hasCert = (clientCertificatePath?.isEmpty == false)
-		if hasCert && saslMechanisms.contains("EXTERNAL") { return "EXTERNAL" }
+		if hasCert, saslMechanisms.contains("EXTERNAL") { return "EXTERNAL" }
 		if saslMechanisms.contains("SCRAM-SHA-256") { return "SCRAM-SHA-256" }
 		return "PLAIN"
 	}

@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 final class IRCConnectionTests: XCTestCase {
-
 	func testInitialState() async {
 		let conn = IRCConnection(host: "irc.example.org", nickname: "bryggauser")
 		let state = await conn.state
 		XCTAssertEqual(state, .disconnected)
 	}
 
-	func testDefaultsPortAndTLS() async {
+	func testDefaultsPortAndTLS() {
 		let conn = IRCConnection(host: "irc.example.org", nickname: "bryggauser")
 		let port = conn.port
 		let useTLS = conn.useTLS
@@ -20,18 +19,18 @@ final class IRCConnectionTests: XCTestCase {
 		XCTAssertTrue(useTLS)
 	}
 
-	func testUsernameDefaultsToNickname() async {
+	func testUsernameDefaultsToNickname() {
 		let conn = IRCConnection(host: "irc.example.org", nickname: "alice")
 		XCTAssertEqual(conn.username, "alice")
 		XCTAssertEqual(conn.realName, "alice")
 	}
 
-	func testCustomUsernameAndRealName() async {
+	func testCustomUsernameAndRealName() {
 		let conn = IRCConnection(
 			host: "irc.example.org",
 			nickname: "alice",
 			username: "a",
-			realName: "Alice Liddell"
+			realName: "Alice Liddell",
 		)
 		XCTAssertEqual(conn.username, "a")
 		XCTAssertEqual(conn.realName, "Alice Liddell")

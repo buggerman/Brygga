@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import SwiftUI
 import BryggaCore
+import SwiftUI
 
 @MainActor
 struct ContentView: View {
@@ -170,17 +170,17 @@ struct ServerRow: View {
 
 	private var stateColor: Color {
 		switch server.state {
-		case .registered, .connected: return .green
-		case .connecting: return .yellow
-		case .disconnecting: return .orange
-		case .disconnected: return .gray
+		case .registered, .connected: .green
+		case .connecting: .yellow
+		case .disconnecting: .orange
+		case .disconnected: .gray
 		}
 	}
 }
 
 struct ChannelRow: View {
 	let channel: Channel
-	var serverName: String? = nil
+	var serverName: String?
 
 	var body: some View {
 		HStack {
@@ -248,9 +248,9 @@ struct TypingIndicatorView: View {
 
 	private func message(for names: [String]) -> String {
 		switch names.count {
-		case 1:  return "\(names[0]) is typing\u{2026}"
-		case 2:  return "\(names[0]) and \(names[1]) are typing\u{2026}"
-		default: return "Several people are typing\u{2026}"
+		case 1: "\(names[0]) is typing\u{2026}"
+		case 2: "\(names[0]) and \(names[1]) are typing\u{2026}"
+		default: "Several people are typing\u{2026}"
 		}
 	}
 }
@@ -269,7 +269,7 @@ struct StatusBarView: View {
 	}
 
 	private var totalChannels: Int {
-		appState.servers.reduce(0) { $0 + $1.channels.filter { !$0.isPrivateMessage }.count }
+		appState.servers.reduce(0) { $0 + $1.channels.count(where: { !$0.isPrivateMessage }) }
 	}
 
 	var body: some View {
@@ -321,19 +321,19 @@ struct StatusBarView: View {
 
 	private func dotColor(for state: Server.ConnectionState) -> Color {
 		switch state {
-		case .registered, .connected: return .green
-		case .connecting:              return .yellow
-		case .disconnecting:           return .orange
-		case .disconnected:            return .gray
+		case .registered, .connected: .green
+		case .connecting: .yellow
+		case .disconnecting: .orange
+		case .disconnected: .gray
 		}
 	}
 
 	private func stateLabel(for state: Server.ConnectionState) -> String {
 		switch state {
-		case .registered, .connected: return "connected"
-		case .connecting:              return "connecting\u{2026}"
-		case .disconnecting:           return "disconnecting\u{2026}"
-		case .disconnected:            return "offline"
+		case .registered, .connected: "connected"
+		case .connecting: "connecting\u{2026}"
+		case .disconnecting: "disconnecting\u{2026}"
+		case .disconnected: "offline"
 		}
 	}
 
@@ -363,7 +363,7 @@ struct ChatView: View {
 					FindBar(
 						query: $findQuery,
 						matchCount: matchCount(in: channel),
-						onClose: closeFind
+						onClose: closeFind,
 					)
 					.focused($findFocused)
 					Divider()
@@ -374,8 +374,8 @@ struct ChatView: View {
 				InputBar(
 					nickname: appState.selectedServer?.nickname ?? "",
 					draft: $draft,
-					suggestions: channel.users.map { $0.nickname },
-					onTyping: { state in sendTyping(state, in: channel) }
+					suggestions: channel.users.map(\.nickname),
+					onTyping: { state in sendTyping(state, in: channel) },
 				) {
 					submit(channel: channel)
 				}
@@ -386,7 +386,7 @@ struct ChatView: View {
 				InputBar(
 					nickname: server.nickname,
 					draft: $draft,
-					placeholder: "Type a command, e.g. /join #channel"
+					placeholder: "Type a command, e.g. /join #channel",
 				) {
 					submitServer(server: server)
 				}
@@ -409,7 +409,8 @@ struct ChatView: View {
 			if !draft.isEmpty,
 			   let oldID = oldValue,
 			   let oldChannel = appState.channel(byID: oldID),
-			   let oldSession = session(for: oldChannel) {
+			   let oldSession = session(for: oldChannel)
+			{
 				Task { try? await oldSession.sendTyping(state: "done", to: oldChannel.name) }
 			}
 			draft = ""
@@ -562,7 +563,7 @@ struct ChatView: View {
 			session.recordServer(Message(
 				sender: "*",
 				content: removed ? "removed from perform: \(target)" : "not in perform list: \(target)",
-				kind: .server
+				kind: .server,
 			))
 			return
 		}
@@ -589,7 +590,7 @@ struct ChatView: View {
 			session.recordServer(Message(
 				sender: "*",
 				content: removed ? "unwatched \(target)" : "not in notify list: \(target)",
-				kind: .server
+				kind: .server,
 			))
 			return
 		}
@@ -618,7 +619,7 @@ struct ChatView: View {
 			session.recordServer(Message(
 				sender: "*",
 				content: removed ? "unignored \(target)" : "not in ignore list: \(target)",
-				kind: .server
+				kind: .server,
 			))
 			return
 		}
@@ -677,7 +678,7 @@ struct ChatView: View {
 			let parts = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).map(String.init)
 			guard let target = parts.first else { return }
 			let channelName: String? = parts.count > 1 ? parts[1] : channel?.name
-			guard let channelName = channelName else { return }
+			guard let channelName else { return }
 			Task { try? await session.connection.send("INVITE \(target) \(channelName)") }
 		case "LIST":
 			// Clear prior listing and open the browser; the sheet's task will
@@ -694,14 +695,14 @@ struct ChatView: View {
 			session.recordServer(Message(
 				sender: "*",
 				content: "unignored \(rest)",
-				kind: .server
+				kind: .server,
 			))
 		case "NOTIFY":
 			handleNotifyCommand(rest, session: session)
 		case "PERFORM":
 			handlePerformCommand(rest, session: session)
 		case "ME":
-			guard let channel = channel, !rest.isEmpty else { return }
+			guard let channel, !rest.isEmpty else { return }
 			session.record(Message(sender: sender, content: rest, kind: .action), in: channel)
 			Task { try? await session.sendAction(to: channel.name, action: rest) }
 		case "MSG", "QUERY":
@@ -752,10 +753,10 @@ struct ServerConsoleHeader: View {
 
 	private var stateColor: Color {
 		switch server.state {
-		case .registered, .connected: return .green
-		case .connecting: return .yellow
-		case .disconnecting: return .orange
-		case .disconnected: return .gray
+		case .registered, .connected: .green
+		case .connecting: .yellow
+		case .disconnecting: .orange
+		case .disconnected: .gray
 		}
 	}
 }
@@ -852,14 +853,13 @@ struct MessageList: View {
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
 
 	private var visibleMessages: [Message] {
-		var messages: [Message]
-		if showJoinsParts {
-			messages = channel.messages
+		var messages: [Message] = if showJoinsParts {
+			channel.messages
 		} else {
-			messages = channel.messages.filter { msg in
+			channel.messages.filter { msg in
 				switch msg.kind {
-				case .join, .part, .quit, .nick: return false
-				default: return true
+				case .join, .part, .quit, .nick: false
+				default: true
 				}
 			}
 		}
@@ -876,7 +876,7 @@ struct MessageList: View {
 		guard let markerID = channel.lastReadMessageID else { return nil }
 		let idx = visibleMessages.firstIndex(where: { $0.id == markerID })
 		// Only show the marker if there's at least one unread message after it.
-		guard let idx = idx, idx < visibleMessages.count - 1 else { return nil }
+		guard let idx, idx < visibleMessages.count - 1 else { return nil }
 		return idx
 	}
 
@@ -1007,7 +1007,7 @@ struct MessageRow: View {
 		.background(
 			message.isHighlight
 				? Color.accentColor.opacity(0.15)
-				: Color.clear
+				: Color.clear,
 		)
 		.overlay(alignment: .leading) {
 			if message.isHighlight {
@@ -1018,7 +1018,6 @@ struct MessageRow: View {
 		}
 	}
 
-	@ViewBuilder
 	private var rowBody: some View {
 		HStack(alignment: .top, spacing: 8) {
 			Text(timestampText)
@@ -1068,7 +1067,7 @@ struct MessageRow: View {
 /// Returns the first HTTP/HTTPS URL found in `text`, or `nil`.
 @MainActor
 private let _linkDetector: NSDataDetector? = try? NSDataDetector(
-	types: NSTextCheckingResult.CheckingType.link.rawValue
+	types: NSTextCheckingResult.CheckingType.link.rawValue,
 )
 
 @MainActor
@@ -1125,7 +1124,7 @@ struct LinkPreviewView: View {
 			Link(destination: url) {
 				AsyncImage(url: url) { phase in
 					switch phase {
-					case .success(let image):
+					case let .success(image):
 						image
 							.resizable()
 							.scaledToFit()
@@ -1145,7 +1144,7 @@ struct LinkPreviewView: View {
 					if let imageURL = preview.imageURL {
 						AsyncImage(url: imageURL) { phase in
 							switch phase {
-							case .success(let image):
+							case let .success(image):
 								image
 									.resizable()
 									.scaledToFill()
@@ -1201,7 +1200,7 @@ struct InputBar: View {
 	/// Invoked with `"active"` (throttled to once per 3 seconds while the
 	/// draft is non-empty) and `"done"` (on submit or when the draft goes
 	/// back to empty). `nil` disables typing notifications entirely.
-	var onTyping: ((String) -> Void)? = nil
+	var onTyping: ((String) -> Void)?
 	let onSubmit: () -> Void
 
 	@Environment(AppState.self) private var appState
@@ -1231,7 +1230,9 @@ struct InputBar: View {
 	/// `@` for nick mentions, `:` for emoji.
 	@State private var pickerKind: Character = "@"
 
-	private var pickerActive: Bool { !pickerRows.isEmpty }
+	private var pickerActive: Bool {
+		!pickerRows.isEmpty
+	}
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 0) {
@@ -1239,7 +1240,7 @@ struct InputBar: View {
 				CompletionPopover(
 					rows: pickerRows,
 					selectedIndex: pickerIndex,
-					onPick: { pickCompletion(atIndex: $0) }
+					onPick: { pickCompletion(atIndex: $0) },
 				)
 				.padding(.horizontal, 12)
 				.padding(.top, 6)
@@ -1302,7 +1303,8 @@ struct InputBar: View {
 							return
 						}
 						if !draft.hasSuffix(completionMatches.indices.contains(completionIndex)
-							? completionMatches[completionIndex] : "") {
+							? completionMatches[completionIndex] : "")
+						{
 							resetCompletion()
 						}
 						emitTypingForDraftChange()
@@ -1520,7 +1522,7 @@ struct InputBar: View {
 		// Replace the `:shortcode:` run with the emoji character.
 		let replacementStart = openIdx
 		let replacementEnd = draft.endIndex
-		draft.replaceSubrange(replacementStart..<replacementEnd, with: emoji)
+		draft.replaceSubrange(replacementStart ..< replacementEnd, with: emoji)
 		resetCompletion()
 	}
 
@@ -1622,7 +1624,7 @@ struct CompletionPopover: View {
 					RoundedRectangle(cornerRadius: 4, style: .continuous)
 						.fill(index == selectedIndex
 							? Color.accentColor.opacity(0.25)
-							: Color.clear)
+							: Color.clear),
 				)
 				.contentShape(Rectangle())
 				.onTapGesture { onPick(index) }
@@ -1633,7 +1635,7 @@ struct CompletionPopover: View {
 		.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 		.overlay(
 			RoundedRectangle(cornerRadius: 6, style: .continuous)
-				.strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+				.strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5),
 		)
 	}
 }
@@ -1662,13 +1664,14 @@ struct GlobalFindSheet: View {
 		for server in appState.servers {
 			for channel in server.channels {
 				for message in channel.messages
-				where message.content.lowercased().contains(needle)
-				   || message.sender.lowercased().contains(needle) {
+					where message.content.lowercased().contains(needle)
+					|| message.sender.lowercased().contains(needle)
+				{
 					out.append(GlobalFindMatch(
 						serverName: server.name,
 						channelName: channel.name,
 						channelID: channel.id,
-						message: message
+						message: message,
 					))
 				}
 			}
@@ -1676,7 +1679,7 @@ struct GlobalFindSheet: View {
 		// Newest first, capped so a huge scrollback doesn't freeze layout.
 		return out.sorted(by: { $0.message.timestamp > $1.message.timestamp })
 			.prefix(300)
-			.map { $0 }
+			.map(\.self)
 	}
 
 	var body: some View {
@@ -1789,7 +1792,7 @@ private struct GlobalFindMatchRow: View {
 		let end: String.Index = content.index(range.upperBound, offsetBy: radius, limitedBy: content.endIndex) ?? content.endIndex
 		let leading = start > content.startIndex ? "\u{2026}" : ""
 		let trailing = end < content.endIndex ? "\u{2026}" : ""
-		let middle = String(content[start..<end])
+		let middle = String(content[start ..< end])
 		return leading + middle + trailing
 	}
 }
@@ -1819,7 +1822,7 @@ struct QuickSwitcherSheet: View {
 					id: channel.id,
 					serverName: server.name,
 					channelName: channel.name,
-					isPrivateMessage: channel.isPrivateMessage
+					isPrivateMessage: channel.isPrivateMessage,
 				))
 			}
 		}
@@ -1827,7 +1830,7 @@ struct QuickSwitcherSheet: View {
 		guard !needle.isEmpty else { return out }
 		return out.filter {
 			$0.channelName.lowercased().contains(needle) ||
-			$0.serverName.lowercased().contains(needle)
+				$0.serverName.lowercased().contains(needle)
 		}
 	}
 
@@ -1907,7 +1910,7 @@ struct QuickJoinSheet: View {
 	@FocusState private var channelFocused: Bool
 
 	private var eligibleServers: [Server] {
-		appState.servers.filter { $0.isActive }
+		appState.servers.filter(\.isActive)
 	}
 
 	private var canSubmit: Bool {
@@ -1982,19 +1985,18 @@ struct ChannelListSheet: View {
 	/// Default: biggest channels first, so the noisy flagships surface
 	/// at the top on a freshly-loaded /LIST.
 	@State private var sortOrder: [KeyPathComparator<ChannelListing>] = [
-		KeyPathComparator(\.userCount, order: .reverse)
+		KeyPathComparator(\.userCount, order: .reverse),
 	]
 
 	private var listings: [ChannelListing] {
 		let all = appState.selectedServer?.channelListing ?? []
 		let needle = filter.lowercased()
-		let filtered: [ChannelListing]
-		if needle.isEmpty {
-			filtered = all
+		let filtered: [ChannelListing] = if needle.isEmpty {
+			all
 		} else {
-			filtered = all.filter {
+			all.filter {
 				$0.name.lowercased().contains(needle) ||
-				$0.topic.lowercased().contains(needle)
+					$0.topic.lowercased().contains(needle)
 			}
 		}
 		return filtered.sorted(using: sortOrder)
@@ -2093,10 +2095,10 @@ struct UserListView: View {
 		Button("Query") { query(nick) }
 		Divider()
 		Menu("Channel mode") {
-			Button("Op")       { setMode(channelName, "+o", nick) }
-			Button("Deop")     { setMode(channelName, "-o", nick) }
-			Button("Voice")    { setMode(channelName, "+v", nick) }
-			Button("Devoice")  { setMode(channelName, "-v", nick) }
+			Button("Op") { setMode(channelName, "+o", nick) }
+			Button("Deop") { setMode(channelName, "-o", nick) }
+			Button("Voice") { setMode(channelName, "+v", nick) }
+			Button("Devoice") { setMode(channelName, "-v", nick) }
 		}
 		Divider()
 		Button("Kick", role: .destructive) { kick(channelName, nick) }
@@ -2152,22 +2154,22 @@ enum NickColor {
 	/// Curated palette of 16 hues that remain legible on both light and
 	/// dark backgrounds. Avoids pure black/white/grey.
 	static let palette: [Color] = [
-		Color(red: 0.23, green: 0.49, blue: 1.00),   // blue
-		Color(red: 0.18, green: 0.72, blue: 0.45),   // green
-		Color(red: 0.94, green: 0.55, blue: 0.18),   // orange
-		Color(red: 0.71, green: 0.35, blue: 0.77),   // purple
-		Color(red: 0.18, green: 0.74, blue: 0.77),   // teal
-		Color(red: 0.89, green: 0.35, blue: 0.52),   // pink
-		Color(red: 0.83, green: 0.69, blue: 0.22),   // gold
-		Color(red: 0.42, green: 0.35, blue: 0.80),   // slate blue
-		Color(red: 0.76, green: 0.33, blue: 0.31),   // brick
-		Color(red: 0.48, green: 0.60, blue: 0.31),   // olive
-		Color(red: 0.35, green: 0.65, blue: 0.84),   // sky
-		Color(red: 0.82, green: 0.42, blue: 0.54),   // rose
-		Color(red: 0.48, green: 0.62, blue: 0.62),   // sage
-		Color(red: 0.88, green: 0.55, blue: 0.23),   // ochre
-		Color(red: 0.56, green: 0.43, blue: 0.72),   // lavender
-		Color(red: 0.31, green: 0.62, blue: 0.49),   // jade
+		Color(red: 0.23, green: 0.49, blue: 1.00), // blue
+		Color(red: 0.18, green: 0.72, blue: 0.45), // green
+		Color(red: 0.94, green: 0.55, blue: 0.18), // orange
+		Color(red: 0.71, green: 0.35, blue: 0.77), // purple
+		Color(red: 0.18, green: 0.74, blue: 0.77), // teal
+		Color(red: 0.89, green: 0.35, blue: 0.52), // pink
+		Color(red: 0.83, green: 0.69, blue: 0.22), // gold
+		Color(red: 0.42, green: 0.35, blue: 0.80), // slate blue
+		Color(red: 0.76, green: 0.33, blue: 0.31), // brick
+		Color(red: 0.48, green: 0.60, blue: 0.31), // olive
+		Color(red: 0.35, green: 0.65, blue: 0.84), // sky
+		Color(red: 0.82, green: 0.42, blue: 0.54), // rose
+		Color(red: 0.48, green: 0.62, blue: 0.62), // sage
+		Color(red: 0.88, green: 0.55, blue: 0.23), // ochre
+		Color(red: 0.56, green: 0.43, blue: 0.72), // lavender
+		Color(red: 0.31, green: 0.62, blue: 0.49), // jade
 	]
 
 	static func color(for nickname: String) -> Color {
@@ -2228,23 +2230,23 @@ extension AttributedString {
 		let plain = String(attributed.characters)
 		guard !plain.isEmpty else { return }
 		guard let detector = try? NSDataDetector(
-			types: NSTextCheckingResult.CheckingType.link.rawValue
+			types: NSTextCheckingResult.CheckingType.link.rawValue,
 		) else { return }
 
 		let fullRange = NSRange(plain.startIndex..., in: plain)
 		detector.enumerateMatches(in: plain, options: [], range: fullRange) { match, _, _ in
-			guard let match = match, let url = match.url else { return }
+			guard let match, let url = match.url else { return }
 			guard let swiftRange = Range(match.range, in: plain) else { return }
 			let startOffset = plain.distance(from: plain.startIndex, to: swiftRange.lowerBound)
 			let length = plain.distance(from: swiftRange.lowerBound, to: swiftRange.upperBound)
 			let startIdx = attributed.characters.index(
 				attributed.characters.startIndex,
-				offsetBy: startOffset
+				offsetBy: startOffset,
 			)
 			let endIdx = attributed.characters.index(startIdx, offsetBy: length)
-			attributed[startIdx..<endIdx].link = url
-			attributed[startIdx..<endIdx].underlineStyle = .single
-			attributed[startIdx..<endIdx].foregroundColor = Color.accentColor
+			attributed[startIdx ..< endIdx].link = url
+			attributed[startIdx ..< endIdx].underlineStyle = .single
+			attributed[startIdx ..< endIdx].foregroundColor = Color.accentColor
 		}
 	}
 }
@@ -2263,7 +2265,8 @@ struct DetachedChannelView: View {
 
 	var body: some View {
 		if let channel = appState.channel(byID: channelID),
-		   let session = session(for: channel) {
+		   let session = session(for: channel)
+		{
 			VStack(spacing: 0) {
 				MessageList(channel: channel)
 				TypingIndicatorView(channel: channel)
@@ -2274,7 +2277,7 @@ struct DetachedChannelView: View {
 					suggestions: channel.users.map(\.nickname),
 					onTyping: { state in
 						Task { try? await session.sendTyping(state: state, to: channel.name) }
-					}
+					},
 				) {
 					submit(channel: channel, session: session)
 				}

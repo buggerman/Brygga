@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import Foundation
-import CryptoKit
 import CommonCrypto
+import CryptoKit
+import Foundation
 
 /// Client-side SCRAM-SHA-256 (RFC 7677) state machine without channel binding.
 /// Drives the three-message exchange used by IRCv3 SASL:
@@ -51,7 +51,7 @@ public struct SCRAMSHA256Client {
 	/// Consume the plaintext `server-first-message` and produce the plaintext
 	/// `client-final-message`.
 	public mutating func clientFinalMessage(serverFirst: String) throws -> String {
-		guard case .awaitingServerFirst(let clientFirstBare) = step else {
+		guard case let .awaitingServerFirst(clientFirstBare) = step else {
 			throw SCRAMError.invalidState
 		}
 		let attrs = Self.parseAttributes(serverFirst)
@@ -87,7 +87,7 @@ public struct SCRAMSHA256Client {
 	/// used to short-cut the server-signature check — defence in depth
 	/// on top of the TLS tunnel SCRAM already runs inside.
 	public mutating func verifyServerFinal(_ serverFinal: String) throws {
-		guard case .awaitingServerFinal(let expected) = step else {
+		guard case let .awaitingServerFinal(expected) = step else {
 			throw SCRAMError.invalidState
 		}
 		let attrs = Self.parseAttributes(serverFinal)
@@ -107,13 +107,15 @@ public struct SCRAMSHA256Client {
 	static func constantTimeEquals(_ a: Data, _ b: Data) -> Bool {
 		guard a.count == b.count else { return false }
 		var diff: UInt8 = 0
-		for i in 0..<a.count {
+		for i in 0 ..< a.count {
 			diff |= a[i] ^ b[i]
 		}
 		return diff == 0
 	}
 
-	public var isFinished: Bool { step == .done }
+	public var isFinished: Bool {
+		step == .done
+	}
 
 	// MARK: - Primitives
 
@@ -145,7 +147,7 @@ public struct SCRAMSHA256Client {
 					saltBuf.bindMemory(to: UInt8.self).baseAddress, saltBuf.count,
 					CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
 					UInt32(iterations),
-					derivedBuf.bindMemory(to: UInt8.self).baseAddress, keyLength
+					derivedBuf.bindMemory(to: UInt8.self).baseAddress, keyLength,
 				)
 			}
 		}
@@ -156,7 +158,7 @@ public struct SCRAMSHA256Client {
 	static func xor(_ a: Data, _ b: Data) -> Data {
 		precondition(a.count == b.count)
 		var out = Data(count: a.count)
-		for i in 0..<a.count {
+		for i in 0 ..< a.count {
 			out[i] = a[i] ^ b[i]
 		}
 		return out

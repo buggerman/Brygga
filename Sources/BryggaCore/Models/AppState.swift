@@ -4,7 +4,7 @@
 import Foundation
 import Observation
 #if canImport(AppKit)
-import AppKit
+	import AppKit
 #endif
 import UserNotifications
 
@@ -74,7 +74,7 @@ public final class AppState {
 		// the center throws an NSInternalInconsistencyException.
 		guard Bundle.main.bundleURL.pathExtension == "app" else { return }
 		UNUserNotificationCenter.current().requestAuthorization(
-			options: [.alert, .sound, .badge]
+			options: [.alert, .sound, .badge],
 		) { _, _ in }
 	}
 
@@ -84,7 +84,7 @@ public final class AppState {
 	private func notifyHighlight(_ message: Message, in channel: Channel) {
 		let isForegroundedOnThisChannel: Bool = {
 			#if canImport(AppKit)
-			guard NSApp.isActive else { return false }
+				guard NSApp.isActive else { return false }
 			#endif
 			return selection == channel.id
 		}()
@@ -97,7 +97,7 @@ public final class AppState {
 			let request = UNNotificationRequest(
 				identifier: UUID().uuidString,
 				content: content,
-				trigger: nil
+				trigger: nil,
 			)
 			UNUserNotificationCenter.current().add(request)
 		}
@@ -111,7 +111,7 @@ public final class AppState {
 			acc + server.channels.reduce(0) { $0 + $1.highlightCount }
 		}
 		#if canImport(AppKit)
-		NSApp.dockTile.badgeLabel = total > 0 ? String(total) : nil
+			NSApp.dockTile.badgeLabel = total > 0 ? String(total) : nil
 		#endif
 	}
 
@@ -169,7 +169,7 @@ public final class AppState {
 				performCommands: config.performCommands,
 				pinnedChannels: config.pinnedChannels,
 				clientCertificatePath: config.clientCertificatePath,
-				clientCertificatePassphrase: certPassphrase
+				clientCertificatePassphrase: certPassphrase,
 			)
 			// Pre-create Channel objects for auto-join channels so the async
 			// scrollback rehydrate below has somewhere to land. Without this,
@@ -192,7 +192,7 @@ public final class AppState {
 			Task { [server] in
 				let serverMessages = await ScrollbackStore.shared.load(
 					serverId: server.id,
-					target: "__server__"
+					target: "__server__",
 				)
 				await MainActor.run {
 					server.messages.insert(contentsOf: serverMessages, at: 0)
@@ -200,7 +200,7 @@ public final class AppState {
 				for channel in server.channels {
 					let msgs = await ScrollbackStore.shared.load(
 						serverId: server.id,
-						target: channel.name
+						target: channel.name,
 					)
 					await MainActor.run {
 						channel.messages.insert(contentsOf: msgs, at: 0)
@@ -224,10 +224,10 @@ public final class AppState {
 		let configs: [ServerStore.ServerConfig] = servers.map { server in
 			let joined = server.channels
 				.filter { $0.isJoined && !$0.isPrivateMessage }
-				.map { $0.name }
+				.map(\.name)
 			let queries = server.channels
-				.filter { $0.isPrivateMessage }
-				.map { $0.name }
+				.filter(\.isPrivateMessage)
+				.map(\.name)
 			return ServerStore.ServerConfig(
 				id: server.id,
 				name: server.name,
@@ -248,7 +248,7 @@ public final class AppState {
 				performCommands: server.performCommands,
 				pinnedChannels: server.pinnedChannels,
 				clientCertificatePath: server.clientCertificatePath,
-				clientCertificatePassphrase: nil
+				clientCertificatePassphrase: nil,
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -323,7 +323,7 @@ public final class AppState {
 		performCommands: [String] = [],
 		pinnedChannels: [String] = [],
 		clientCertificatePath: String? = nil,
-		clientCertificatePassphrase: String? = nil
+		clientCertificatePassphrase: String? = nil,
 	) -> Server {
 		let server = Server(
 			id: id,
@@ -333,7 +333,7 @@ public final class AppState {
 			useTLS: useTLS,
 			nickname: nickname,
 			saslAccount: saslAccount,
-			saslPassword: saslPassword
+			saslPassword: saslPassword,
 		)
 		server.ignoreList = ignoreList
 		server.notifyList = notifyList
@@ -355,7 +355,7 @@ public final class AppState {
 			saslAccount: saslAccount,
 			saslPassword: saslPassword,
 			clientCertificatePath: clientCertificatePath,
-			clientCertificatePassphrase: clientCertificatePassphrase
+			clientCertificatePassphrase: clientCertificatePassphrase,
 		)
 		let session = IRCSession(server: server, connection: connection)
 		session.autoJoinChannels = autoJoinChannels
@@ -396,7 +396,7 @@ public final class AppState {
 	/// Sends QUIT and tears down every active session. Call this before
 	/// terminating the process so the server sees a clean client shutdown.
 	public func disconnectAll(quitMessage: String? = nil) async {
-		let snapshots = sessions.values.map { $0 }
+		let snapshots = sessions.values.map(\.self)
 		// Mark each session user-disconnected *before* tearing the socket down
 		// so the reconnect loop doesn't schedule itself in the gap.
 		for session in snapshots {
@@ -460,7 +460,8 @@ public final class AppState {
 		let ids = selectableIDs
 		guard !ids.isEmpty else { return }
 		guard let current = selection,
-		      let currentIndex = ids.firstIndex(of: current) else {
+		      let currentIndex = ids.firstIndex(of: current)
+		else {
 			selection = direction >= 0 ? ids.first : ids.last
 			return
 		}

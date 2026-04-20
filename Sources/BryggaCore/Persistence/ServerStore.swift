@@ -6,7 +6,6 @@ import Foundation
 /// Loads and saves the list of configured servers to
 /// `~/Library/Application Support/Brygga/servers.json`.
 public enum ServerStore {
-
 	public struct ServerConfig: Codable, Equatable {
 		/// Stable identifier for this server across launches. Keys the
 		/// scrollback directory on disk (`scrollback/<id>/<target>.log`)
@@ -101,7 +100,7 @@ public enum ServerStore {
 			performCommands: [String] = [],
 			pinnedChannels: [String] = [],
 			clientCertificatePath: String? = nil,
-			clientCertificatePassphrase: String? = nil
+			clientCertificatePassphrase: String? = nil,
 		) {
 			self.id = id
 			self.name = name

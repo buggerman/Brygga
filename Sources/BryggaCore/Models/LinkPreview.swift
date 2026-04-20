@@ -15,7 +15,10 @@ public enum LinkPreviewStatus: Sendable, Equatable {
 
 /// A single inline link preview for a URL found in message scrollback.
 public struct LinkPreview: Identifiable, Sendable, Equatable {
-	public var id: URL { url }
+	public var id: URL {
+		url
+	}
+
 	public let url: URL
 	public var status: LinkPreviewStatus
 	public var title: String?
@@ -32,7 +35,7 @@ public struct LinkPreview: Identifiable, Sendable, Equatable {
 		siteName: String? = nil,
 		summary: String? = nil,
 		imageURL: URL? = nil,
-		isDirectImage: Bool = false
+		isDirectImage: Bool = false,
 	) {
 		self.url = url
 		self.status = status
@@ -63,7 +66,9 @@ public final class LinkPreviewStore {
 	public init() {}
 
 	/// Look up a cached preview. `nil` means "not fetched yet".
-	public func preview(for url: URL) -> LinkPreview? { cache[url] }
+	public func preview(for url: URL) -> LinkPreview? {
+		cache[url]
+	}
 
 	/// Begin fetching the preview if it isn't already cached or in flight.
 	public func fetchIfNeeded(_ url: URL) {
@@ -79,7 +84,7 @@ public final class LinkPreviewStore {
 				for: url,
 				maxBytes: maxBytes,
 				htmlBytes: htmlBytes,
-				timeout: timeout
+				timeout: timeout,
 			)
 			self.inFlight.remove(url)
 			self.cache[url] = result ?? LinkPreview(url: url, status: .failed)
@@ -92,7 +97,7 @@ public final class LinkPreviewStore {
 		for url: URL,
 		maxBytes: Int,
 		htmlBytes: Int,
-		timeout: TimeInterval
+		timeout: TimeInterval,
 	) async -> LinkPreview? {
 		var request = URLRequest(url: url, timeoutInterval: timeout)
 		request.setValue("Brygga/0.1 (macOS IRC client)", forHTTPHeaderField: "User-Agent")
@@ -103,7 +108,8 @@ public final class LinkPreviewStore {
 
 		guard let (data, response) = try? await session.data(for: request),
 		      let http = response as? HTTPURLResponse,
-		      (200..<400).contains(http.statusCode) else {
+		      (200 ..< 400).contains(http.statusCode)
+		else {
 			return LinkPreview(url: url, status: .failed)
 		}
 
@@ -118,7 +124,7 @@ public final class LinkPreviewStore {
 				url: url,
 				status: .loaded,
 				imageURL: url,
-				isDirectImage: true
+				isDirectImage: true,
 			)
 		}
 
@@ -140,7 +146,7 @@ public final class LinkPreviewStore {
 		let resolvedImage: URL? = ogImage.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
 
 		let finalTitle = ogTitle ?? title
-		if finalTitle == nil && ogDesc == nil && resolvedImage == nil {
+		if finalTitle == nil, ogDesc == nil, resolvedImage == nil {
 			return LinkPreview(url: url, status: .failed)
 		}
 		return LinkPreview(
@@ -150,7 +156,7 @@ public final class LinkPreviewStore {
 			siteName: ogSite?.decodingHTMLEntities().trimmingWhitespace(),
 			summary: ogDesc?.decodingHTMLEntities().trimmingWhitespace(),
 			imageURL: resolvedImage,
-			isDirectImage: false
+			isDirectImage: false,
 		)
 	}
 
@@ -185,11 +191,11 @@ public final class LinkPreviewStore {
 		// Handle both attribute orderings (property first vs content first).
 		if let v = firstMatch(
 			in: html,
-			pattern: "<meta[^>]+property=[\"']\(escaped)[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>"
+			pattern: "<meta[^>]+property=[\"']\(escaped)[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>",
 		) { return v }
 		return firstMatch(
 			in: html,
-			pattern: "<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+property=[\"']\(escaped)[\"'][^>]*>"
+			pattern: "<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+property=[\"']\(escaped)[\"'][^>]*>",
 		)
 	}
 
@@ -197,18 +203,18 @@ public final class LinkPreviewStore {
 		let escaped = NSRegularExpression.escapedPattern(for: name)
 		if let v = firstMatch(
 			in: html,
-			pattern: "<meta[^>]+name=[\"']\(escaped)[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>"
+			pattern: "<meta[^>]+name=[\"']\(escaped)[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>",
 		) { return v }
 		return firstMatch(
 			in: html,
-			pattern: "<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+name=[\"']\(escaped)[\"'][^>]*>"
+			pattern: "<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+name=[\"']\(escaped)[\"'][^>]*>",
 		)
 	}
 
 	private static func firstMatch(in string: String, pattern: String) -> String? {
 		guard let regex = try? NSRegularExpression(
 			pattern: pattern,
-			options: [.caseInsensitive, .dotMatchesLineSeparators]
+			options: [.caseInsensitive, .dotMatchesLineSeparators],
 		) else { return nil }
 		let range = NSRange(string.startIndex..., in: string)
 		guard let match = regex.firstMatch(in: string, range: range),

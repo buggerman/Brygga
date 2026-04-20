@@ -11,28 +11,28 @@ let package = Package(
 		//   API pulls the whole floor up.
 		// Policy: build for latest, raise the floor as needed, no
 		// `@available` guards.
-		.macOS(.v15)
+		.macOS(.v15),
 	],
 	products: [
 		.executable(name: "Brygga", targets: ["Brygga"]),
-		.library(name: "BryggaCore", targets: ["BryggaCore"])
+		.library(name: "BryggaCore", targets: ["BryggaCore"]),
 	],
 	targets: [
 		// Domain logic (IRC protocol, models) — testable
 		.target(
 			name: "BryggaCore",
-			path: "Sources/BryggaCore"
+			path: "Sources/BryggaCore",
 		),
 		// App executable (SwiftUI views, @main)
 		.executableTarget(
 			name: "Brygga",
 			dependencies: ["BryggaCore"],
-			path: "Sources/Brygga"
+			path: "Sources/Brygga",
 		),
 		.testTarget(
 			name: "BryggaCoreTests",
 			dependencies: ["BryggaCore"],
-			path: "Tests"
-		)
-	]
+			path: "Tests",
+		),
+	],
 )

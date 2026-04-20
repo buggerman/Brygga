@@ -9,7 +9,6 @@ import Foundation
 /// styling primitive it prefers (SwiftUI `AttributedString`, `NSAttributedString`,
 /// raw Text modifiers).
 public enum IRCFormatting {
-
 	/// A single contiguous span of text sharing one style.
 	public struct Run: Sendable, Equatable {
 		public let text: String
@@ -37,7 +36,7 @@ public enum IRCFormatting {
 			strikethrough: Bool = false,
 			reverse: Bool = false,
 			foreground: Int? = nil,
-			background: Int? = nil
+			background: Int? = nil,
 		) {
 			self.bold = bold
 			self.italic = italic
@@ -52,15 +51,16 @@ public enum IRCFormatting {
 	}
 
 	// MARK: - Control-code byte values
+
 	// These are the standard mIRC / IRCv3 formatting control bytes.
-	private static let bold: Character           = "\u{02}"
-	private static let color: Character          = "\u{03}"
-	private static let reset: Character          = "\u{0F}"
-	private static let monospace: Character      = "\u{11}"   // rare; we treat as no-op
-	private static let reverse: Character        = "\u{16}"
-	private static let italic: Character         = "\u{1D}"
-	private static let strikethrough: Character  = "\u{1E}"
-	private static let underline: Character      = "\u{1F}"
+	private static let bold: Character = "\u{02}"
+	private static let color: Character = "\u{03}"
+	private static let reset: Character = "\u{0F}"
+	private static let monospace: Character = "\u{11}" // rare; we treat as no-op
+	private static let reverse: Character = "\u{16}"
+	private static let italic: Character = "\u{1D}"
+	private static let strikethrough: Character = "\u{1E}"
+	private static let underline: Character = "\u{1F}"
 
 	/// Parse `text` into a sequence of styled runs. Plain text (no control
 	/// codes) returns a single run with the default style.
@@ -113,7 +113,7 @@ public enum IRCFormatting {
 				i += 1
 				// Read 1–2 digit foreground number.
 				var fgStr = ""
-				while i < chars.count && chars[i].isASCII && chars[i].isNumber && fgStr.count < 2 {
+				while i < chars.count, chars[i].isASCII, chars[i].isNumber, fgStr.count < 2 {
 					fgStr.append(chars[i])
 					i += 1
 				}
@@ -122,11 +122,11 @@ public enum IRCFormatting {
 					// Optional ",bg" follow-up. The comma is consumed only if
 					// it's actually followed by digits — otherwise a literal
 					// comma in "color3,meh" would be swallowed.
-					if i < chars.count && chars[i] == "," {
+					if i < chars.count, chars[i] == "," {
 						let afterComma = i + 1
 						var bgStr = ""
 						var j = afterComma
-						while j < chars.count && chars[j].isASCII && chars[j].isNumber && bgStr.count < 2 {
+						while j < chars.count, chars[j].isASCII, chars[j].isNumber, bgStr.count < 2 {
 							bgStr.append(chars[j])
 							j += 1
 						}
@@ -162,23 +162,23 @@ public enum IRCFormatting {
 	/// renderer falls back to the default text color.
 	public static func color(for index: Int) -> RGB? {
 		switch index {
-		case 0:  return RGB(red: 1.00, green: 1.00, blue: 1.00)  // white
-		case 1:  return RGB(red: 0.00, green: 0.00, blue: 0.00)  // black
-		case 2:  return RGB(red: 0.00, green: 0.00, blue: 0.50)  // blue
-		case 3:  return RGB(red: 0.00, green: 0.58, blue: 0.00)  // green
-		case 4:  return RGB(red: 1.00, green: 0.00, blue: 0.00)  // light red
-		case 5:  return RGB(red: 0.50, green: 0.00, blue: 0.00)  // brown
-		case 6:  return RGB(red: 0.61, green: 0.00, blue: 0.61)  // purple
-		case 7:  return RGB(red: 0.99, green: 0.50, blue: 0.00)  // orange
-		case 8:  return RGB(red: 1.00, green: 1.00, blue: 0.00)  // yellow
-		case 9:  return RGB(red: 0.00, green: 0.99, blue: 0.00)  // light green
-		case 10: return RGB(red: 0.00, green: 0.58, blue: 0.58)  // cyan
-		case 11: return RGB(red: 0.00, green: 1.00, blue: 1.00)  // light cyan
-		case 12: return RGB(red: 0.00, green: 0.00, blue: 0.99)  // light blue
-		case 13: return RGB(red: 1.00, green: 0.00, blue: 1.00)  // pink
-		case 14: return RGB(red: 0.50, green: 0.50, blue: 0.50)  // grey
-		case 15: return RGB(red: 0.82, green: 0.82, blue: 0.82)  // light grey
-		default: return nil
+		case 0: RGB(red: 1.00, green: 1.00, blue: 1.00) // white
+		case 1: RGB(red: 0.00, green: 0.00, blue: 0.00) // black
+		case 2: RGB(red: 0.00, green: 0.00, blue: 0.50) // blue
+		case 3: RGB(red: 0.00, green: 0.58, blue: 0.00) // green
+		case 4: RGB(red: 1.00, green: 0.00, blue: 0.00) // light red
+		case 5: RGB(red: 0.50, green: 0.00, blue: 0.00) // brown
+		case 6: RGB(red: 0.61, green: 0.00, blue: 0.61) // purple
+		case 7: RGB(red: 0.99, green: 0.50, blue: 0.00) // orange
+		case 8: RGB(red: 1.00, green: 1.00, blue: 0.00) // yellow
+		case 9: RGB(red: 0.00, green: 0.99, blue: 0.00) // light green
+		case 10: RGB(red: 0.00, green: 0.58, blue: 0.58) // cyan
+		case 11: RGB(red: 0.00, green: 1.00, blue: 1.00) // light cyan
+		case 12: RGB(red: 0.00, green: 0.00, blue: 0.99) // light blue
+		case 13: RGB(red: 1.00, green: 0.00, blue: 1.00) // pink
+		case 14: RGB(red: 0.50, green: 0.50, blue: 0.50) // grey
+		case 15: RGB(red: 0.82, green: 0.82, blue: 0.82) // light grey
+		default: nil
 		}
 	}
 }

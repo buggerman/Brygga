@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
-import XCTest
 @testable import BryggaCore
+import XCTest
 
 final class EmojiShortcodesTests: XCTestCase {
-
 	func testExactLookupReturnsEmoji() {
 		XCTAssertEqual(EmojiShortcodes.emoji(for: "smile"), "\u{1F604}")
 		XCTAssertEqual(EmojiShortcodes.emoji(for: "fire"), "\u{1F525}")

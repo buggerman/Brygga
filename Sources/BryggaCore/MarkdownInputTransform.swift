@@ -15,9 +15,9 @@ import Foundation
 /// ` _world_ ` convert. Enabled via `PreferencesKeys.markdownInputEnabled`
 /// (default on); toggle off in Preferences → General.
 public enum MarkdownInputTransform {
-	private static let boldCode   = "\u{02}"  // ^B
-	private static let italicCode = "\u{1D}"  // ^I
-	private static let strikeCode = "\u{1E}"  // ^S
+	private static let boldCode = "\u{02}" // ^B
+	private static let italicCode = "\u{1D}" // ^I
+	private static let strikeCode = "\u{1E}" // ^S
 
 	/// Rewrites each markdown run in `text` to the matching mIRC
 	/// control-code pair. Safe to run on any input — unmatched delimiters
@@ -27,17 +27,17 @@ public enum MarkdownInputTransform {
 		result = apply(
 			pattern: #"(?<!\w)\*([^*\r\n]+?)\*(?!\w)"#,
 			replacement: "\(boldCode)$1\(boldCode)",
-			to: result
+			to: result,
 		)
 		result = apply(
 			pattern: #"(?<!\w)_([^_\r\n]+?)_(?!\w)"#,
 			replacement: "\(italicCode)$1\(italicCode)",
-			to: result
+			to: result,
 		)
 		result = apply(
 			pattern: #"(?<!\w)~([^~\r\n]+?)~(?!\w)"#,
 			replacement: "\(strikeCode)$1\(strikeCode)",
-			to: result
+			to: result,
 		)
 		return result
 	}
@@ -48,7 +48,7 @@ public enum MarkdownInputTransform {
 		return regex.stringByReplacingMatches(
 			in: text,
 			range: range,
-			withTemplate: replacement
+			withTemplate: replacement,
 		)
 	}
 }
