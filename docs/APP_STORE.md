@@ -12,8 +12,9 @@ What needs to be in place before Brygga can submit, what's done, and what's stil
 | App Store category | ✅ Done | `LSApplicationCategoryType=public.app-category.social-networking` in Info.plist |
 | About / Acknowledgements panel (BSD-3-Clause notice) | ✅ Done | `Sources/Brygga/Acknowledgements.swift` + `CommandGroup(replacing: .appInfo)` in `BryggaApp.swift` |
 | Report-user affordance (Guideline 1.2) | ✅ Done | UserListView right-click → "Report User…" → `ReportLink.openUserReport` → `.github/ISSUE_TEMPLATE/user-report.yml` |
-| App Privacy disclosure draft | ⏳ Pending | follow-up PR |
-| App Store listing copy + age rating | ⏳ Pending | follow-up PR |
+| App Privacy disclosure draft | ✅ Done | [`PRIVACY.md`](PRIVACY.md) — public privacy policy whose URL goes into App Store Connect |
+| App Store listing copy + age rating | ✅ Done | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) — name / subtitle / promo / keywords / description / age rating answers / screenshots checklist |
+| Privacy Policy URL | ✅ Done | <https://github.com/buggerman/Brygga/blob/main/docs/PRIVACY.md> — paste into App Store Connect on submission day |
 | Apple Distribution certificate | 🔒 Gated by $99/yr | submission day |
 | Mac App Store provisioning profile | 🔒 Gated by $99/yr | submission day |
 | App Store Connect listing | 🔒 Gated by $99/yr | submission day |

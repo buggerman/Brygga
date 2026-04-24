@@ -121,6 +121,10 @@ See [AGENTS.md](AGENTS.md) for the rules AI coding agents (and humans) should fo
 
 The mIRC feature-parity plan — what's in scope, out of scope, and in what order — lives in [docs/PARITY.md](docs/PARITY.md).
 
+## Privacy
+
+Brygga collects no data. Local config and scrollback stay on your Mac; chat traffic goes directly to whichever IRC networks you connect to. Full policy: [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ## License
 
 BSD 3-Clause. See source file headers.
