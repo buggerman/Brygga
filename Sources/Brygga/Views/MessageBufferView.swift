@@ -21,6 +21,8 @@ struct MessageBufferView: NSViewRepresentable {
 	let lastReadMessageID: UUID?
 	let nickColorsEnabled: Bool
 	let timestampFormat: String
+	let linkPreviewsEnabled: Bool
+	let linkPreviews: LinkPreviewStore?
 
 	func makeCoordinator() -> Coordinator {
 		Coordinator()
@@ -74,6 +76,8 @@ struct MessageBufferView: NSViewRepresentable {
 			lastReadMessageID: lastReadMessageID,
 			nickColorsEnabled: nickColorsEnabled,
 			timestampFormat: timestampFormat,
+			linkPreviewsEnabled: linkPreviewsEnabled,
+			linkPreviews: linkPreviews,
 		)
 	}
 
@@ -87,26 +91,75 @@ struct MessageBufferView: NSViewRepresentable {
 		private var messagesByID: [UUID: Message] = [:]
 		private var nickColorsEnabled = true
 		private var timestampFormat = "system"
+		private var linkPreviewsEnabled = true
+		private weak var linkPreviewStore: LinkPreviewStore?
+
+		/// Cached decoded image bytes, keyed by the `imageURL` of the
+		/// preview they illustrate. Images fetched once per Coordinator
+		/// lifetime; when the view goes off-screen and back, the cache is
+		/// reused until the Coordinator itself is torn down.
+		private var images: [URL: NSImage] = [:]
+		private var inFlightImages: Set<URL> = []
+
+		/// The most-recent `apply` inputs, kept so the Coordinator can
+		/// re-render itself when an image fetch completes or the link
+		/// preview store mutates — neither of which routes through
+		/// SwiftUI's `updateNSView`.
+		private var lastApply: ApplyArgs?
+		private var hasSubscribedToStore = false
 
 		private let urlDetector = try? NSDataDetector(
 			types: NSTextCheckingResult.CheckingType.link.rawValue,
 		)
+
+		private struct ApplyArgs {
+			let messages: [Message]
+			let lastReadMessageID: UUID?
+			let nickColorsEnabled: Bool
+			let timestampFormat: String
+			let linkPreviewsEnabled: Bool
+		}
 
 		func apply(
 			messages: [Message],
 			lastReadMessageID: UUID?,
 			nickColorsEnabled: Bool,
 			timestampFormat: String,
+			linkPreviewsEnabled: Bool,
+			linkPreviews: LinkPreviewStore?,
 		) {
-			guard let textView, let storage = textView.textStorage else { return }
+			linkPreviewStore = linkPreviews
+			lastApply = ApplyArgs(
+				messages: messages,
+				lastReadMessageID: lastReadMessageID,
+				nickColorsEnabled: nickColorsEnabled,
+				timestampFormat: timestampFormat,
+				linkPreviewsEnabled: linkPreviewsEnabled,
+			)
+			render()
+			if linkPreviews != nil, linkPreviewsEnabled, !hasSubscribedToStore {
+				hasSubscribedToStore = true
+				subscribeToPreviewStore()
+			}
+			kickOffPreviewFetches(for: messages, enabled: linkPreviewsEnabled)
+		}
 
-			let optionsChanged = nickColorsEnabled != self.nickColorsEnabled
-				|| timestampFormat != self.timestampFormat
-				|| lastReadMessageID != renderedLastReadID
-			self.nickColorsEnabled = nickColorsEnabled
-			self.timestampFormat = timestampFormat
+		private func render() {
+			guard
+				let args = lastApply,
+				let textView,
+				let storage = textView.textStorage
+			else { return }
 
-			let newIDs = messages.map(\.id)
+			let optionsChanged = args.nickColorsEnabled != nickColorsEnabled
+				|| args.timestampFormat != timestampFormat
+				|| args.lastReadMessageID != renderedLastReadID
+				|| args.linkPreviewsEnabled != linkPreviewsEnabled
+			nickColorsEnabled = args.nickColorsEnabled
+			timestampFormat = args.timestampFormat
+			linkPreviewsEnabled = args.linkPreviewsEnabled
+
+			let newIDs = args.messages.map(\.id)
 			let canAppend = !optionsChanged
 				&& newIDs.starts(with: renderedIDs)
 				&& newIDs.count > renderedIDs.count
@@ -114,26 +167,58 @@ struct MessageBufferView: NSViewRepresentable {
 			let wasAtBottom = isScrolledToBottom()
 
 			if canAppend {
-				let tail = Array(messages.suffix(messages.count - renderedIDs.count))
+				let tail = Array(args.messages.suffix(args.messages.count - renderedIDs.count))
 				let appendText = NSMutableAttributedString()
 				for message in tail {
-					appendText.append(attributed(for: message, lastReadID: lastReadMessageID))
+					appendText.append(attributed(for: message, lastReadID: args.lastReadMessageID))
 				}
 				storage.append(appendText)
 			} else {
 				let full = NSMutableAttributedString()
-				for message in messages {
-					full.append(attributed(for: message, lastReadID: lastReadMessageID))
+				for message in args.messages {
+					full.append(attributed(for: message, lastReadID: args.lastReadMessageID))
 				}
 				storage.setAttributedString(full)
 			}
 
-			messagesByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+			messagesByID = Dictionary(uniqueKeysWithValues: args.messages.map { ($0.id, $0) })
 			renderedIDs = newIDs
-			renderedLastReadID = lastReadMessageID
+			renderedLastReadID = args.lastReadMessageID
 
 			if wasAtBottom || !canAppend {
 				scrollToBottom()
+			}
+		}
+
+		/// Rebuild the buffer using the last inputs. Used by async callbacks —
+		/// image fetch completions and link-preview store observations — that
+		/// don't route through SwiftUI's update cycle.
+		private func reapply() {
+			guard lastApply != nil else { return }
+			// Force a full rebuild even when the message list hasn't grown —
+			// the preview attachments may have changed.
+			renderedIDs = []
+			render()
+		}
+
+		private func subscribeToPreviewStore() {
+			guard let store = linkPreviewStore else { return }
+			withObservationTracking {
+				_ = store.cache
+			} onChange: { [weak self] in
+				Task { @MainActor [weak self] in
+					guard let self else { return }
+					reapply()
+					subscribeToPreviewStore()
+				}
+			}
+		}
+
+		private func kickOffPreviewFetches(for messages: [Message], enabled: Bool) {
+			guard enabled, let store = linkPreviewStore else { return }
+			for message in messages {
+				guard let url = firstPreviewableURL(in: message.content) else { continue }
+				store.fetchIfNeeded(url)
 			}
 		}
 
@@ -204,6 +289,10 @@ struct MessageBufferView: NSViewRepresentable {
 
 			out.append(.init(string: "\n"))
 
+			if let previewParagraph = linkPreviewAttachment(for: message) {
+				out.append(previewParagraph)
+			}
+
 			let fullRange = NSRange(location: 0, length: out.length)
 			out.addAttribute(.bryggaMessageID, value: message.id, range: fullRange)
 
@@ -222,6 +311,103 @@ struct MessageBufferView: NSViewRepresentable {
 			}
 
 			return out
+		}
+
+		private func linkPreviewAttachment(for message: Message) -> NSAttributedString? {
+			guard
+				linkPreviewsEnabled,
+				let store = linkPreviewStore,
+				let url = firstPreviewableURL(in: message.content),
+				let preview = store.preview(for: url),
+				preview.status == .loaded
+			else { return nil }
+
+			let image = loadedImage(for: preview)
+			let cell = LinkPreviewAttachmentCell(preview: preview, image: image)
+			let attachment = NSTextAttachment()
+			attachment.attachmentCell = cell
+
+			let attachmentString = NSMutableAttributedString(attachment: attachment)
+
+			let para = NSMutableParagraphStyle()
+			para.firstLineHeadIndent = 68
+			para.headIndent = 68
+			para.paragraphSpacing = 4
+			para.paragraphSpacingBefore = 2
+
+			let paragraph = NSMutableAttributedString()
+			paragraph.append(attachmentString)
+			paragraph.append(NSAttributedString(string: "\n"))
+			paragraph.addAttribute(
+				.paragraphStyle,
+				value: para,
+				range: NSRange(location: 0, length: paragraph.length),
+			)
+			// Clicking the attachment follows the URL.
+			paragraph.addAttribute(
+				.link,
+				value: url,
+				range: NSRange(location: 0, length: attachmentString.length),
+			)
+			return paragraph
+		}
+
+		/// Return the cached `NSImage` for the preview if any. If the preview
+		/// points at an image URL and we haven't fetched it yet, kick off the
+		/// fetch and return `nil` — the Coordinator will reapply once the
+		/// image lands.
+		private func loadedImage(for preview: LinkPreview) -> NSImage? {
+			let imageURL = preview.imageURL ?? (preview.isDirectImage ? preview.url : nil)
+			guard let imageURL else { return nil }
+			if let cached = images[imageURL] { return cached }
+			fetchImage(imageURL)
+			return nil
+		}
+
+		private func fetchImage(_ url: URL) {
+			guard images[url] == nil, !inFlightImages.contains(url) else { return }
+			guard let scheme = url.scheme?.lowercased(),
+			      scheme == "http" || scheme == "https" else { return }
+			inFlightImages.insert(url)
+
+			Task { [weak self] in
+				let data = await Self.downloadImageBytes(for: url)
+				await MainActor.run {
+					guard let self else { return }
+					self.inFlightImages.remove(url)
+					if let data, let image = NSImage(data: data) {
+						self.images[url] = image
+						self.reapply()
+					}
+				}
+			}
+		}
+
+		private static func downloadImageBytes(for url: URL) async -> Data? {
+			var request = URLRequest(url: url, timeoutInterval: 10)
+			request.setValue("Brygga/0.1 (macOS IRC client)", forHTTPHeaderField: "User-Agent")
+			let session = URLSession(configuration: .ephemeral)
+			defer { session.invalidateAndCancel() }
+			guard let (data, response) = try? await session.data(for: request),
+			      let http = response as? HTTPURLResponse,
+			      (200 ..< 400).contains(http.statusCode),
+			      data.count <= 2 * 1024 * 1024
+			else { return nil }
+			return data
+		}
+
+		private func firstPreviewableURL(in text: String) -> URL? {
+			guard let detector = urlDetector, !text.isEmpty else { return nil }
+			let range = NSRange(text.startIndex..., in: text)
+			var found: URL?
+			detector.enumerateMatches(in: text, options: [], range: range) { match, _, stop in
+				guard let url = match?.url, let scheme = url.scheme?.lowercased() else { return }
+				if scheme == "http" || scheme == "https" {
+					found = url
+					stop.pointee = true
+				}
+			}
+			return found
 		}
 
 		private func ircAttributed(
@@ -413,6 +599,205 @@ struct MessageBufferView: NSViewRepresentable {
 			default: return "[\(ts)] * \(message.sender) \(body)"
 			}
 		}
+	}
+}
+
+// MARK: - Link preview attachment cell
+
+/// Custom `NSTextAttachmentCell` that draws a compact link-preview card
+/// inline in the chat buffer: rounded background, optional thumbnail on
+/// the left, site name + title + summary on the right. For direct-image
+/// previews the thumbnail fills the whole card. Non-destructive — if the
+/// image hasn't loaded yet the cell draws a placeholder rectangle.
+///
+/// Deliberately *not* `@MainActor` — `NSTextAttachmentCell`'s core methods
+/// (`cellSize`, `draw(withFrame:in:)`, `cellBaselineOffset`) are declared
+/// nonisolated in AppKit and are invoked by the layout manager from its
+/// own scheduling. The cell holds only immutable value types so nonisolated
+/// access is safe.
+final class LinkPreviewAttachmentCell: NSTextAttachmentCell {
+	private let preview: LinkPreview
+	private let previewImage: NSImage?
+
+	private nonisolated static let cardWidth: CGFloat = 420
+	private nonisolated static let cardHeight: CGFloat = 80
+	private nonisolated static let directImageMaxHeight: CGFloat = 240
+	private nonisolated static let directImageMaxWidth: CGFloat = 420
+	private nonisolated static let padding: CGFloat = 10
+	private nonisolated static let cornerRadius: CGFloat = 8
+	private nonisolated static let thumbSize: CGFloat = 60
+
+	init(preview: LinkPreview, image: NSImage?) {
+		self.preview = preview
+		previewImage = image
+		super.init(textCell: "")
+	}
+
+	@available(*, unavailable)
+	required init(coder _: NSCoder) {
+		fatalError("init(coder:) not supported")
+	}
+
+	override func cellSize() -> NSSize {
+		if preview.isDirectImage, let previewImage {
+			let aspect = previewImage.size.height / max(previewImage.size.width, 1)
+			let width = min(Self.directImageMaxWidth, previewImage.size.width)
+			let height = min(Self.directImageMaxHeight, width * aspect)
+			return NSSize(width: width, height: height)
+		}
+		return NSSize(width: Self.cardWidth, height: Self.cardHeight)
+	}
+
+	override func cellBaselineOffset() -> NSPoint {
+		// Drop the card below the text baseline so it reads like a separate
+		// paragraph attached to the message above.
+		NSPoint(x: 0, y: -cellSize().height + 2)
+	}
+
+	override func draw(withFrame cellFrame: NSRect, in _: NSView?) {
+		if preview.isDirectImage, let previewImage {
+			drawDirectImage(previewImage, in: cellFrame)
+		} else {
+			drawCard(in: cellFrame)
+		}
+	}
+
+	private func drawDirectImage(_ image: NSImage, in frame: NSRect) {
+		NSGraphicsContext.saveGraphicsState()
+		let path = NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6)
+		path.addClip()
+		image.draw(
+			in: frame,
+			from: .zero,
+			operation: .sourceOver,
+			fraction: 1.0,
+			respectFlipped: true,
+			hints: [.interpolation: NSImageInterpolation.high.rawValue],
+		)
+		NSGraphicsContext.restoreGraphicsState()
+	}
+
+	private func drawCard(in frame: NSRect) {
+		NSGraphicsContext.saveGraphicsState()
+		defer { NSGraphicsContext.restoreGraphicsState() }
+
+		let cardRect = frame.insetBy(dx: 0.5, dy: 0.5)
+		let path = NSBezierPath(
+			roundedRect: cardRect,
+			xRadius: Self.cornerRadius,
+			yRadius: Self.cornerRadius,
+		)
+		NSColor.windowBackgroundColor.withAlphaComponent(0.6).setFill()
+		path.fill()
+		NSColor.separatorColor.withAlphaComponent(0.8).setStroke()
+		path.lineWidth = 1
+		path.stroke()
+
+		var textOriginX = cardRect.origin.x + Self.padding
+
+		if let previewImage {
+			let thumbRect = NSRect(
+				x: cardRect.origin.x + Self.padding,
+				y: cardRect.origin.y + (cardRect.height - Self.thumbSize) / 2,
+				width: Self.thumbSize,
+				height: Self.thumbSize,
+			)
+			let thumbPath = NSBezierPath(roundedRect: thumbRect, xRadius: 4, yRadius: 4)
+			thumbPath.setClip()
+			previewImage.draw(
+				in: thumbRect,
+				from: .zero,
+				operation: .sourceOver,
+				fraction: 1.0,
+				respectFlipped: true,
+				hints: [.interpolation: NSImageInterpolation.high.rawValue],
+			)
+			textOriginX = thumbRect.maxX + Self.padding
+		} else if preview.imageURL != nil {
+			// Placeholder while the image loads.
+			let thumbRect = NSRect(
+				x: cardRect.origin.x + Self.padding,
+				y: cardRect.origin.y + (cardRect.height - Self.thumbSize) / 2,
+				width: Self.thumbSize,
+				height: Self.thumbSize,
+			)
+			NSColor.quaternaryLabelColor.setFill()
+			NSBezierPath(roundedRect: thumbRect, xRadius: 4, yRadius: 4).fill()
+			textOriginX = thumbRect.maxX + Self.padding
+		}
+
+		NSGraphicsContext.restoreGraphicsState()
+		NSGraphicsContext.saveGraphicsState()
+
+		let textMaxX = cardRect.maxX - Self.padding
+		let textRect = NSRect(
+			x: textOriginX,
+			y: cardRect.origin.y + Self.padding,
+			width: max(0, textMaxX - textOriginX),
+			height: cardRect.height - Self.padding * 2,
+		)
+
+		drawCardText(in: textRect)
+	}
+
+	private func drawCardText(in rect: NSRect) {
+		let site = preview.siteName ?? preview.url.host ?? preview.url.absoluteString
+		let siteAttrs: [NSAttributedString.Key: Any] = [
+			.font: NSFont.systemFont(ofSize: 10, weight: .regular),
+			.foregroundColor: NSColor.secondaryLabelColor,
+		]
+		var y = rect.origin.y
+		let siteAttr = NSAttributedString(string: site, attributes: siteAttrs)
+		let siteSize = siteAttr.boundingRect(
+			with: NSSize(width: rect.width, height: .greatestFiniteMagnitude),
+			options: [.usesLineFragmentOrigin],
+		).size
+		siteAttr.draw(in: NSRect(
+			x: rect.origin.x, y: y,
+			width: rect.width, height: siteSize.height,
+		))
+		y += siteSize.height + 2
+
+		if let title = preview.title, !title.isEmpty {
+			let titleAttrs: [NSAttributedString.Key: Any] = [
+				.font: NSFont.systemFont(ofSize: 13, weight: .medium),
+				.foregroundColor: NSColor.labelColor,
+				.paragraphStyle: truncatingParagraph(lines: 2),
+			]
+			let titleAttr = NSAttributedString(string: title, attributes: titleAttrs)
+			let titleRect = NSRect(
+				x: rect.origin.x, y: y,
+				width: rect.width, height: rect.maxY - y,
+			)
+			titleAttr.draw(in: titleRect)
+			let titleSize = titleAttr.boundingRect(
+				with: NSSize(width: rect.width, height: .greatestFiniteMagnitude),
+				options: [.usesLineFragmentOrigin],
+			).size
+			y += min(titleSize.height, rect.maxY - y) + 2
+		}
+
+		if let summary = preview.summary, !summary.isEmpty, y < rect.maxY {
+			let summaryAttrs: [NSAttributedString.Key: Any] = [
+				.font: NSFont.systemFont(ofSize: 11, weight: .regular),
+				.foregroundColor: NSColor.secondaryLabelColor,
+				.paragraphStyle: truncatingParagraph(lines: 2),
+			]
+			let summaryAttr = NSAttributedString(string: summary, attributes: summaryAttrs)
+			let summaryRect = NSRect(
+				x: rect.origin.x, y: y,
+				width: rect.width, height: rect.maxY - y,
+			)
+			summaryAttr.draw(in: summaryRect)
+		}
+	}
+
+	private func truncatingParagraph(lines: Int) -> NSParagraphStyle {
+		let p = NSMutableParagraphStyle()
+		p.lineBreakMode = .byTruncatingTail
+		p.maximumLineHeight = 0
+		_ = lines
+		return p
 	}
 }
 
