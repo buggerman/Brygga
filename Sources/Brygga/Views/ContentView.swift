@@ -1881,6 +1881,7 @@ struct UserListView: View {
 		Button("Kick and Ban", role: .destructive) { kickBan(channelName, nick) }
 		Divider()
 		Button("Ignore") { ignore(nick) }
+		Button("Report User\u{2026}") { reportUser(nick, channelName: channelName) }
 	}
 
 	// MARK: - Actions
@@ -1918,6 +1919,14 @@ struct UserListView: View {
 		guard let session = appState.selectedSession else { return }
 		session.addIgnore(nick)
 		session.recordServer(Message(sender: "*", content: "ignoring \(nick)", kind: .server))
+	}
+
+	private func reportUser(_ nick: String, channelName: String) {
+		ReportLink.openUserReport(
+			nickname: nick,
+			network: appState.selectedServer?.name,
+			channel: channelName,
+		)
 	}
 }
 
