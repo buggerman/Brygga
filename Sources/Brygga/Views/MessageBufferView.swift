@@ -52,9 +52,13 @@ struct MessageBufferView: NSViewRepresentable {
 		textView.autoresizingMask = [.width]
 		textView.isVerticallyResizable = true
 		textView.isHorizontallyResizable = false
+		// Keep only the cursor here — colour and underline are applied
+		// per-range in storage so the disclosure triangle on a collapsed
+		// presence run can be a subdued non-link-looking glyph while real
+		// URLs render blue-underlined. `linkTextAttributes` acts as a
+		// temporary-attribute override on top of storage, so leaving it
+		// empty lets per-range attributes come through uncontested.
 		textView.linkTextAttributes = [
-			.foregroundColor: NSColor.controlAccentColor,
-			.underlineStyle: NSUnderlineStyle.single.rawValue,
 			.cursor: NSCursor.pointingHand,
 		]
 		textView.delegate = context.coordinator
@@ -591,6 +595,19 @@ struct MessageBufferView: NSViewRepresentable {
 				let scheme = url.scheme?.lowercased()
 				guard scheme == "http" || scheme == "https" || scheme == "mailto" else { return }
 				attributed.addAttribute(.link, value: url, range: match.range)
+				// `linkTextAttributes` is now cursor-only, so the blue-underline
+				// "looks like a link" styling has to be painted explicitly on
+				// the URL range here.
+				attributed.addAttribute(
+					.foregroundColor,
+					value: NSColor.controlAccentColor,
+					range: match.range,
+				)
+				attributed.addAttribute(
+					.underlineStyle,
+					value: NSUnderlineStyle.single.rawValue,
+					range: match.range,
+				)
 			}
 		}
 
@@ -657,8 +674,11 @@ struct MessageBufferView: NSViewRepresentable {
 
 		/// Intercepts clicks on the disclosure triangle of a collapsed
 		/// presence run. The triangle carries a `.link` attribute pointing
-		/// at `brygga-toggle-run://<uuid>`; returning `false` tells AppKit
-		/// we've handled the click and suppresses any URL-open attempt.
+		/// at `brygga-toggle-run://<uuid>`. Per Apple's delegate contract,
+		/// return **`true`** when we've handled the click (NSTextView does
+		/// nothing further) and **`false`** to let NSTextView dispatch the
+		/// URL through `NSWorkspace.open(_:)` — the default behaviour that
+		/// opens http / https / mailto in the user's browser or mail client.
 		func textView(
 			_: NSTextView,
 			clickedOnLink link: Any,
@@ -680,10 +700,10 @@ struct MessageBufferView: NSViewRepresentable {
 					}
 					reapply()
 				}
-				return false
+				return true
 			}
-			// Any other URL: let AppKit open it normally.
-			return true
+			// Any other URL: let NSTextView open it via NSWorkspace.
+			return false
 		}
 
 		func textView(
