@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Brygga contributors
 
+import AppKit
 import BryggaCore
 import SwiftUI
 
@@ -774,6 +775,7 @@ struct ServerMessageList: View {
 					}
 				}
 				.padding(12)
+				.textSelection(.enabled)
 			}
 			.onChange(of: server.messages.count) {
 				if let last = server.messages.last {
@@ -893,6 +895,7 @@ struct MessageList: View {
 					}
 				}
 				.padding(12)
+				.textSelection(.enabled)
 			}
 			.onChange(of: channel.messages.count) {
 				if let last = channel.messages.last {
@@ -1032,7 +1035,6 @@ struct MessageRow: View {
 					.foregroundStyle(senderColor(message.sender))
 				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
-					.textSelection(.enabled)
 					.frame(maxWidth: .infinity, alignment: .leading)
 			case .notice:
 				Text("-\(message.sender)-")
@@ -1041,7 +1043,6 @@ struct MessageRow: View {
 				Text(AttributedString.fromIRC(message.content))
 					.font(.system(.body, design: .monospaced))
 					.foregroundStyle(.orange)
-					.textSelection(.enabled)
 					.frame(maxWidth: .infinity, alignment: .leading)
 			case .action:
 				Text("*")
@@ -1059,6 +1060,34 @@ struct MessageRow: View {
 					.frame(maxWidth: .infinity, alignment: .leading)
 			}
 		}
+		.contextMenu {
+			Button("Copy Message") { copy(plainLogLine) }
+			Button("Copy Text") { copy(IRCFormatting.stripControlCodes(message.content)) }
+			Button("Copy Nickname") { copy(message.sender) }
+		}
+	}
+
+	/// Single-line plain-text rendering of the message suitable for the
+	/// pasteboard. Matches the on-screen layout (timestamp, sender decoration,
+	/// content) with all mIRC control codes stripped.
+	private var plainLogLine: String {
+		let body = IRCFormatting.stripControlCodes(message.content)
+		switch message.kind {
+		case .privmsg:
+			return "[\(timestampText)] <\(message.sender)> \(body)"
+		case .notice:
+			return "[\(timestampText)] -\(message.sender)- \(body)"
+		case .action:
+			return "[\(timestampText)] * \(message.sender) \(body)"
+		default:
+			return "[\(timestampText)] * \(message.sender) \(body)"
+		}
+	}
+
+	private func copy(_ text: String) {
+		let pb = NSPasteboard.general
+		pb.clearContents()
+		pb.setString(text, forType: .string)
 	}
 }
 
