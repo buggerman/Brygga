@@ -149,6 +149,14 @@ public enum IRCFormatting {
 		return runs
 	}
 
+	/// Returns `text` with all mIRC/IRCv3 formatting control bytes removed —
+	/// bold, italic, underline, strikethrough, reverse, reset, monospace, and
+	/// any `^K<fg>[,<bg>]` color sequences. Suitable for placing on the system
+	/// pasteboard when the user copies a message.
+	public static func stripControlCodes(_ text: String) -> String {
+		parse(text).map(\.text).joined()
+	}
+
 	// MARK: - mIRC 16-color palette (RGB in 0…1)
 
 	public struct RGB: Sendable, Equatable {
