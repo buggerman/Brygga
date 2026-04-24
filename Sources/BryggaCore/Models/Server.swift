@@ -29,6 +29,11 @@ public final class Server: Identifiable {
 	/// onto `Channel.isPinned` whenever a channel with a matching name is
 	/// created or the pin set changes.
 	public var pinnedChannels: [String] = []
+	/// Per-channel overrides for the "collapse presence runs" preference,
+	/// keyed by lowercased channel name. A present entry wins over the
+	/// global `PreferencesKeys.collapsePresenceRuns` default; absence means
+	/// "inherit". Persisted via `ServerConfig.channelPresenceCollapse`.
+	public var presenceCollapseOverrides: [String: Bool] = [:]
 	public var isAway: Bool = false
 	public var awayMessage: String?
 	public var state: ConnectionState = .disconnected

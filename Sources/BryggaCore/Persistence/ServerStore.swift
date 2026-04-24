@@ -29,11 +29,17 @@ public enum ServerStore {
 		public var pinnedChannels: [String] = []
 		public var clientCertificatePath: String?
 		public var clientCertificatePassphrase: String?
+		/// Optional per-channel overrides for the "collapse presence runs"
+		/// preference. Keyed by lowercased channel name, value is the
+		/// explicit override (true = collapse, false = don't collapse).
+		/// Missing keys or a nil map mean "inherit the global default".
+		public var channelPresenceCollapse: [String: Bool]?
 
 		enum CodingKeys: String, CodingKey {
 			case id, name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
 			     saslAccount, saslPassword, ignoreList, notifyList, performCommands,
-			     pinnedChannels, clientCertificatePath, clientCertificatePassphrase
+			     pinnedChannels, clientCertificatePath, clientCertificatePassphrase,
+			     channelPresenceCollapse
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -59,6 +65,7 @@ public enum ServerStore {
 			pinnedChannels = try c.decodeIfPresent([String].self, forKey: .pinnedChannels) ?? []
 			clientCertificatePath = try c.decodeIfPresent(String.self, forKey: .clientCertificatePath)
 			clientCertificatePassphrase = try c.decodeIfPresent(String.self, forKey: .clientCertificatePassphrase)
+			channelPresenceCollapse = try c.decodeIfPresent([String: Bool].self, forKey: .channelPresenceCollapse)
 		}
 
 		/// Custom encode deliberately skips `saslPassword` and
@@ -82,6 +89,7 @@ public enum ServerStore {
 			try c.encode(pinnedChannels, forKey: .pinnedChannels)
 			try c.encodeIfPresent(clientCertificatePath, forKey: .clientCertificatePath)
 			// saslPassword and clientCertificatePassphrase: intentionally omitted.
+			try c.encodeIfPresent(channelPresenceCollapse, forKey: .channelPresenceCollapse)
 		}
 
 		public init(
@@ -101,6 +109,7 @@ public enum ServerStore {
 			pinnedChannels: [String] = [],
 			clientCertificatePath: String? = nil,
 			clientCertificatePassphrase: String? = nil,
+			channelPresenceCollapse: [String: Bool]? = nil,
 		) {
 			self.id = id
 			self.name = name
@@ -118,6 +127,7 @@ public enum ServerStore {
 			self.pinnedChannels = pinnedChannels
 			self.clientCertificatePath = clientCertificatePath
 			self.clientCertificatePassphrase = clientCertificatePassphrase
+			self.channelPresenceCollapse = channelPresenceCollapse
 		}
 	}
 

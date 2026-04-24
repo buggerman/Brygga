@@ -8,6 +8,11 @@ import Foundation
 /// `@MainActor IRCSession` (reader) share identical strings.
 public enum PreferencesKeys {
 	public static let showJoinsParts = "brygga.showJoinsParts"
+	/// Global default for collapsing consecutive JOIN / PART / QUIT / NICK
+	/// messages into one compacted row with a disclosure triangle. Per-channel
+	/// overrides live on `Server.presenceCollapseOverrides` and win over the
+	/// global default when set. Defaults to true.
+	public static let collapsePresenceRuns = "brygga.collapsePresenceRuns"
 	public static let highlightKeywordsRaw = "brygga.highlightKeywordsRaw"
 	public static let autoJoinOnInvite = "brygga.autoJoinOnInvite"
 	public static let diskLoggingEnabled = "brygga.diskLoggingEnabled"

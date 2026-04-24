@@ -32,6 +32,7 @@ struct PreferencesView: View {
 
 struct GeneralPane: View {
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
+	@AppStorage(PreferencesKeys.collapsePresenceRuns) private var collapsePresenceRuns = true
 	@AppStorage(PreferencesKeys.autoJoinOnInvite) private var autoJoinOnInvite = false
 	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 	@AppStorage(PreferencesKeys.markdownInputEnabled) private var markdownInputEnabled = true
@@ -43,6 +44,7 @@ struct GeneralPane: View {
 		Form {
 			Section("Channels") {
 				Toggle("Show joins and parts in channels", isOn: $showJoinsParts)
+				Toggle("Collapse join/leave runs into a summary line", isOn: $collapsePresenceRuns)
 				Toggle("Auto-join channels when invited", isOn: $autoJoinOnInvite)
 			}
 			Section {
