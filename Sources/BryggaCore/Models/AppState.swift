@@ -171,6 +171,7 @@ public final class AppState {
 				clientCertificatePath: config.clientCertificatePath,
 				clientCertificatePassphrase: certPassphrase,
 			)
+			server.presenceCollapseOverrides = config.channelPresenceCollapse ?? [:]
 			// Pre-create Channel objects for auto-join channels so the async
 			// scrollback rehydrate below has somewhere to land. Without this,
 			// the channel doesn't exist until the server responds to our
@@ -249,6 +250,8 @@ public final class AppState {
 				pinnedChannels: server.pinnedChannels,
 				clientCertificatePath: server.clientCertificatePath,
 				clientCertificatePassphrase: nil,
+				channelPresenceCollapse: server.presenceCollapseOverrides.isEmpty
+					? nil : server.presenceCollapseOverrides,
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -257,6 +260,28 @@ public final class AppState {
 	private func persist() {
 		guard !isRestoring else { return }
 		ServerStore.save(snapshot())
+	}
+
+	/// Resolve the effective "collapse presence runs" value for `channel`,
+	/// preferring the per-channel override on the owning server if one is
+	/// set, otherwise returning `globalDefault`.
+	public func resolvedPresenceCollapse(for channel: Channel, globalDefault: Bool) -> Bool {
+		guard let server = servers.first(where: { $0.channels.contains(where: { $0.id == channel.id }) }) else {
+			return globalDefault
+		}
+		return server.presenceCollapseOverrides[channel.name.lowercased()] ?? globalDefault
+	}
+
+	/// Set or clear the per-channel override for collapsing presence runs.
+	/// Pass `nil` to remove the override and fall back to the global default.
+	public func setPresenceCollapse(for channelName: String, on server: Server, mode: Bool?) {
+		let key = channelName.lowercased()
+		if let mode {
+			server.presenceCollapseOverrides[key] = mode
+		} else {
+			server.presenceCollapseOverrides.removeValue(forKey: key)
+		}
+		persist()
 	}
 
 	/// Look up a channel across all servers by ID. Returns `nil` if the given

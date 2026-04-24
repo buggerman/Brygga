@@ -23,6 +23,7 @@ struct MessageBufferView: NSViewRepresentable {
 	let timestampFormat: String
 	let linkPreviewsEnabled: Bool
 	let linkPreviews: LinkPreviewStore?
+	let collapsePresenceRuns: Bool
 
 	func makeCoordinator() -> Coordinator {
 		Coordinator()
@@ -78,6 +79,7 @@ struct MessageBufferView: NSViewRepresentable {
 			timestampFormat: timestampFormat,
 			linkPreviewsEnabled: linkPreviewsEnabled,
 			linkPreviews: linkPreviews,
+			collapsePresenceRuns: collapsePresenceRuns,
 		)
 	}
 
@@ -92,7 +94,13 @@ struct MessageBufferView: NSViewRepresentable {
 		private var nickColorsEnabled = true
 		private var timestampFormat = "system"
 		private var linkPreviewsEnabled = true
+		private var collapsePresenceRuns = false
 		private weak var linkPreviewStore: LinkPreviewStore?
+		/// IDs of presence runs that the user has explicitly expanded in
+		/// the buffer. A run's id is the id of its first message (see
+		/// `foldPresenceRuns`), so this set survives appends that merely
+		/// extend an existing run.
+		private var expandedRunIDs: Set<UUID> = []
 
 		/// Cached decoded image bytes, keyed by the `imageURL` of the
 		/// preview they illustrate. Images fetched once per Coordinator
@@ -118,6 +126,7 @@ struct MessageBufferView: NSViewRepresentable {
 			let nickColorsEnabled: Bool
 			let timestampFormat: String
 			let linkPreviewsEnabled: Bool
+			let collapsePresenceRuns: Bool
 		}
 
 		func apply(
@@ -127,6 +136,7 @@ struct MessageBufferView: NSViewRepresentable {
 			timestampFormat: String,
 			linkPreviewsEnabled: Bool,
 			linkPreviews: LinkPreviewStore?,
+			collapsePresenceRuns: Bool,
 		) {
 			linkPreviewStore = linkPreviews
 			lastApply = ApplyArgs(
@@ -135,6 +145,7 @@ struct MessageBufferView: NSViewRepresentable {
 				nickColorsEnabled: nickColorsEnabled,
 				timestampFormat: timestampFormat,
 				linkPreviewsEnabled: linkPreviewsEnabled,
+				collapsePresenceRuns: collapsePresenceRuns,
 			)
 			render()
 			if linkPreviews != nil, linkPreviewsEnabled, !hasSubscribedToStore {
@@ -155,12 +166,18 @@ struct MessageBufferView: NSViewRepresentable {
 				|| args.timestampFormat != timestampFormat
 				|| args.lastReadMessageID != renderedLastReadID
 				|| args.linkPreviewsEnabled != linkPreviewsEnabled
+				|| args.collapsePresenceRuns != collapsePresenceRuns
 			nickColorsEnabled = args.nickColorsEnabled
 			timestampFormat = args.timestampFormat
 			linkPreviewsEnabled = args.linkPreviewsEnabled
+			collapsePresenceRuns = args.collapsePresenceRuns
 
 			let newIDs = args.messages.map(\.id)
+			// In collapse mode, appending a single message can change the
+			// shape of a pre-existing run at the tail (e.g. extending it or
+			// closing it), so skip the append fast-path and always rebuild.
 			let canAppend = !optionsChanged
+				&& !args.collapsePresenceRuns
 				&& newIDs.starts(with: renderedIDs)
 				&& newIDs.count > renderedIDs.count
 
@@ -175,8 +192,14 @@ struct MessageBufferView: NSViewRepresentable {
 				storage.append(appendText)
 			} else {
 				let full = NSMutableAttributedString()
-				for message in args.messages {
-					full.append(attributed(for: message, lastReadID: args.lastReadMessageID))
+				if args.collapsePresenceRuns {
+					for entry in foldPresenceRuns(args.messages) {
+						full.append(attributed(forEntry: entry, lastReadID: args.lastReadMessageID))
+					}
+				} else {
+					for message in args.messages {
+						full.append(attributed(for: message, lastReadID: args.lastReadMessageID))
+					}
 				}
 				storage.setAttributedString(full)
 			}
@@ -188,6 +211,103 @@ struct MessageBufferView: NSViewRepresentable {
 			if wasAtBottom || !canAppend {
 				scrollToBottom()
 			}
+		}
+
+		// MARK: - Entry rendering (collapse mode)
+
+		private func attributed(forEntry entry: ChatEntry, lastReadID: UUID?) -> NSAttributedString {
+			switch entry {
+			case let .message(m):
+				attributed(for: m, lastReadID: lastReadID)
+			case let .presenceRun(id, messages):
+				attributedForRun(id: id, messages: messages, lastReadID: lastReadID)
+			}
+		}
+
+		private func attributedForRun(
+			id: UUID,
+			messages: [Message],
+			lastReadID: UUID?,
+		) -> NSAttributedString {
+			let out = NSMutableAttributedString()
+			let expanded = expandedRunIDs.contains(id)
+			let isCollapsible = messages.count > 1
+
+			out.append(summaryLine(
+				runID: id,
+				messages: messages,
+				expanded: expanded,
+				showTriangle: isCollapsible,
+			))
+
+			if expanded, isCollapsible {
+				for message in messages {
+					out.append(attributed(for: message, lastReadID: nil))
+				}
+			}
+
+			// The "new" divider applies to whichever original message carries
+			// lastReadID — if that message lives inside this run, drop the
+			// divider after the whole run so read/unread stays separated.
+			if let lastReadID, messages.contains(where: { $0.id == lastReadID }) {
+				out.append(lineMarker())
+			}
+
+			return out
+		}
+
+		private func summaryLine(
+			runID: UUID,
+			messages: [Message],
+			expanded: Bool,
+			showTriangle: Bool,
+		) -> NSAttributedString {
+			let font = NSFont.monospacedSystemFont(
+				ofSize: NSFont.systemFontSize,
+				weight: .regular,
+			)
+			let tsFont = NSFont.monospacedSystemFont(
+				ofSize: NSFont.smallSystemFontSize,
+				weight: .regular,
+			)
+
+			let out = NSMutableAttributedString()
+
+			// Empty timestamp column so the summary aligns with message rows.
+			out.append(NSAttributedString(string: "        ", attributes: [
+				.font: tsFont,
+				.foregroundColor: NSColor.secondaryLabelColor,
+			]))
+
+			if showTriangle {
+				let triangle = expanded ? "▾ " : "▸ "
+				var triAttrs: [NSAttributedString.Key: Any] = [
+					.font: font,
+					.foregroundColor: NSColor.tertiaryLabelColor,
+				]
+				if let url = URL(string: "brygga-toggle-run://\(runID.uuidString)") {
+					triAttrs[.link] = url
+				}
+				out.append(NSAttributedString(string: triangle, attributes: triAttrs))
+			} else {
+				// Preserve alignment with collapsible rows.
+				out.append(NSAttributedString(string: "  ", attributes: [
+					.font: font,
+				]))
+			}
+
+			let summary = presenceRunSummary(messages)
+			out.append(NSAttributedString(string: summary + "\n", attributes: [
+				.font: font,
+				.foregroundColor: NSColor.secondaryLabelColor,
+			]))
+
+			out.addAttribute(
+				.bryggaMessageID,
+				value: runID,
+				range: NSRange(location: 0, length: out.length),
+			)
+			return out
 		}
 
 		/// Rebuild the buffer using the last inputs. Used by async callbacks —
@@ -534,6 +654,37 @@ struct MessageBufferView: NSViewRepresentable {
 		}
 
 		// MARK: - NSTextViewDelegate
+
+		/// Intercepts clicks on the disclosure triangle of a collapsed
+		/// presence run. The triangle carries a `.link` attribute pointing
+		/// at `brygga-toggle-run://<uuid>`; returning `false` tells AppKit
+		/// we've handled the click and suppresses any URL-open attempt.
+		func textView(
+			_: NSTextView,
+			clickedOnLink link: Any,
+			at _: Int,
+		) -> Bool {
+			guard let url = link as? URL ?? (link as? String).flatMap(URL.init(string:)) else {
+				return false
+			}
+			if url.scheme == "brygga-toggle-run" {
+				let idString = url.host ?? url.absoluteString.replacingOccurrences(
+					of: "brygga-toggle-run://",
+					with: "",
+				)
+				if let uuid = UUID(uuidString: idString) {
+					if expandedRunIDs.contains(uuid) {
+						expandedRunIDs.remove(uuid)
+					} else {
+						expandedRunIDs.insert(uuid)
+					}
+					reapply()
+				}
+				return false
+			}
+			// Any other URL: let AppKit open it normally.
+			return true
+		}
 
 		func textView(
 			_ view: NSTextView,

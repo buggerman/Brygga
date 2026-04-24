@@ -87,6 +87,7 @@ struct SidebarView: View {
 									.tag(Optional(channel.id))
 									.contextMenu {
 										Button("Unpin") { appState.togglePin(channelID: channel.id) }
+										presenceCollapseSubmenu(for: channel)
 									}
 							}
 						}
@@ -120,6 +121,7 @@ struct SidebarView: View {
 										Button(channel.isPinned ? "Unpin" : "Pin to Favorites") {
 											appState.togglePin(channelID: channel.id)
 										}
+										presenceCollapseSubmenu(for: channel)
 									}
 							}
 						}
@@ -136,6 +138,37 @@ struct SidebarView: View {
 			return server.name
 		}
 		return nil
+	}
+
+	private func server(owning channel: Channel) -> Server? {
+		appState.servers.first { $0.channels.contains { $0.id == channel.id } }
+	}
+
+	/// Three-way override toggle (Default / Always / Never) for a channel's
+	/// presence-run collapse setting. Skipped for private-message tabs,
+	/// which have no presence traffic.
+	@ViewBuilder
+	private func presenceCollapseSubmenu(for channel: Channel) -> some View {
+		if !channel.isPrivateMessage, let server = server(owning: channel) {
+			let override = server.presenceCollapseOverrides[channel.name.lowercased()]
+			Menu("Collapse joins/parts") {
+				Button {
+					appState.setPresenceCollapse(for: channel.name, on: server, mode: nil)
+				} label: {
+					Label("Use Default", systemImage: override == nil ? "checkmark" : "")
+				}
+				Button {
+					appState.setPresenceCollapse(for: channel.name, on: server, mode: true)
+				} label: {
+					Label("Always", systemImage: override == true ? "checkmark" : "")
+				}
+				Button {
+					appState.setPresenceCollapse(for: channel.name, on: server, mode: false)
+				} label: {
+					Label("Never", systemImage: override == false ? "checkmark" : "")
+				}
+			}
+		}
 	}
 }
 
@@ -777,6 +810,7 @@ struct ServerMessageList: View {
 			timestampFormat: timestampFormat,
 			linkPreviewsEnabled: linkPreviewsEnabled,
 			linkPreviews: appState.linkPreviews,
+			collapsePresenceRuns: false,
 		)
 	}
 }
@@ -850,6 +884,7 @@ struct MessageList: View {
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
 	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
 	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
+	@AppStorage(PreferencesKeys.collapsePresenceRuns) private var collapsePresenceRunsDefault = true
 
 	private var visibleMessages: [Message] {
 		var messages: [Message] = if showJoinsParts {
@@ -880,6 +915,14 @@ struct MessageList: View {
 		return markerID
 	}
 
+	private var effectiveCollapse: Bool {
+		guard findQuery.isEmpty else { return false }
+		return appState.resolvedPresenceCollapse(
+			for: channel,
+			globalDefault: collapsePresenceRunsDefault,
+		)
+	}
+
 	var body: some View {
 		MessageBufferView(
 			messages: visibleMessages,
@@ -888,6 +931,7 @@ struct MessageList: View {
 			timestampFormat: timestampFormat,
 			linkPreviewsEnabled: linkPreviewsEnabled,
 			linkPreviews: appState.linkPreviews,
+			collapsePresenceRuns: effectiveCollapse,
 		)
 	}
 }
