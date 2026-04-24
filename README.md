@@ -4,6 +4,8 @@ A modern, fast, feature-rich IRC client for macOS — built with Swift and Swift
 
 Brygga is in early development. The core client works end-to-end (connect, join, send, receive, persist) but many features you'd expect from a mature IRC client are still missing.
 
+![Brygga connected to irc.libera.chat, showing the #MacOSX channel with live chat, inline link previews, collapsed join/leave runs, and the channel and user-list sidebars](docs/screenshot.png)
+
 ## The name
 
 **Brygga** (Swedish, /ˈbrʏɡːa/ — roughly *BRUEG-ah*, with the `y` pronounced like German `ü` or French `u`) is the Swedish word for a **pier, jetty, or gangway** — the wooden walkway that connects the shore to a boat. A fitting name for a client whose job is to be the plank you walk across to reach the IRC networks on the other side.
