@@ -764,27 +764,16 @@ struct ServerConsoleHeader: View {
 
 struct ServerMessageList: View {
 	let server: Server
+	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
+	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
 
 	var body: some View {
-		ScrollViewReader { proxy in
-			ScrollView {
-				LazyVStack(alignment: .leading, spacing: 2) {
-					ForEach(server.messages) { message in
-						MessageRow(message: message)
-							.id(message.id)
-					}
-				}
-				.padding(12)
-				.textSelection(.enabled)
-			}
-			.onChange(of: server.messages.count) {
-				if let last = server.messages.last {
-					withAnimation(.easeOut(duration: 0.1)) {
-						proxy.scrollTo(last.id, anchor: .bottom)
-					}
-				}
-			}
-		}
+		MessageBufferView(
+			messages: server.messages,
+			lastReadMessageID: nil,
+			nickColorsEnabled: nickColorsEnabled,
+			timestampFormat: timestampFormat,
+		)
 	}
 }
 
@@ -853,6 +842,8 @@ struct MessageList: View {
 	let channel: Channel
 	var findQuery: String = ""
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
+	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
+	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
 
 	private var visibleMessages: [Message] {
 		var messages: [Message] = if showJoinsParts {
@@ -874,37 +865,22 @@ struct MessageList: View {
 		return messages
 	}
 
-	private var markerIndex: Int? {
-		guard let markerID = channel.lastReadMessageID else { return nil }
-		let idx = visibleMessages.firstIndex(where: { $0.id == markerID })
-		// Only show the marker if there's at least one unread message after it.
-		guard let idx, idx < visibleMessages.count - 1 else { return nil }
-		return idx
+	private var effectiveLastReadID: UUID? {
+		guard
+			let markerID = channel.lastReadMessageID,
+			let idx = visibleMessages.firstIndex(where: { $0.id == markerID }),
+			idx < visibleMessages.count - 1
+		else { return nil }
+		return markerID
 	}
 
 	var body: some View {
-		ScrollViewReader { proxy in
-			ScrollView {
-				LazyVStack(alignment: .leading, spacing: 2) {
-					ForEach(Array(visibleMessages.enumerated()), id: \.element.id) { index, message in
-						MessageRow(message: message)
-							.id(message.id)
-						if markerIndex == index {
-							LineMarker()
-						}
-					}
-				}
-				.padding(12)
-				.textSelection(.enabled)
-			}
-			.onChange(of: channel.messages.count) {
-				if let last = channel.messages.last {
-					withAnimation(.easeOut(duration: 0.1)) {
-						proxy.scrollTo(last.id, anchor: .bottom)
-					}
-				}
-			}
-		}
+		MessageBufferView(
+			messages: visibleMessages,
+			lastReadMessageID: effectiveLastReadID,
+			nickColorsEnabled: nickColorsEnabled,
+			timestampFormat: timestampFormat,
+		)
 	}
 }
 
@@ -937,287 +913,6 @@ struct FindBar: View {
 		.padding(.horizontal, 12)
 		.padding(.vertical, 6)
 		.background(.regularMaterial)
-	}
-}
-
-/// Horizontal divider showing where the user last read a channel. Appears
-/// between the last-seen message and the first unread one.
-struct LineMarker: View {
-	var body: some View {
-		HStack(spacing: 8) {
-			Rectangle()
-				.fill(Color.accentColor.opacity(0.6))
-				.frame(height: 1)
-			Text("new")
-				.font(.caption.weight(.medium))
-				.foregroundStyle(Color.accentColor)
-			Rectangle()
-				.fill(Color.accentColor.opacity(0.6))
-				.frame(height: 1)
-		}
-		.padding(.vertical, 4)
-	}
-}
-
-struct MessageRow: View {
-	let message: Message
-	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
-	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
-	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
-
-	private func senderColor(_ nick: String) -> Color {
-		nickColorsEnabled ? NickColor.color(for: nick) : Color.accentColor
-	}
-
-	private var timestampText: String {
-		let date = message.timestamp
-		switch timestampFormat {
-		case "12h":
-			let f = DateFormatter()
-			f.dateFormat = "h:mm a"
-			f.locale = Locale(identifier: "en_US_POSIX")
-			return f.string(from: date)
-		case "24h":
-			let f = DateFormatter()
-			f.dateFormat = "HH:mm"
-			f.locale = Locale(identifier: "en_US_POSIX")
-			return f.string(from: date)
-		default:
-			return date.formatted(date: .omitted, time: .shortened)
-		}
-	}
-
-	private var actionAttributedString: AttributedString {
-		var sender = AttributedString(message.sender + " ")
-		sender.foregroundColor = senderColor(message.sender)
-		var composed = sender
-		composed.append(AttributedString.fromIRC(message.content))
-		return composed
-	}
-
-	var body: some View {
-		VStack(alignment: .leading, spacing: 2) {
-			rowBody
-			if linkPreviewsEnabled, let url = firstPreviewableURL(in: message.content) {
-				LinkPreviewView(url: url)
-					.padding(.leading, 68)
-					.padding(.trailing, 16)
-					.padding(.top, 2)
-			}
-		}
-		.padding(.vertical, message.isHighlight ? 2 : 0)
-		.padding(.horizontal, message.isHighlight ? 4 : 0)
-		.background(
-			message.isHighlight
-				? Color.accentColor.opacity(0.15)
-				: Color.clear,
-		)
-		.overlay(alignment: .leading) {
-			if message.isHighlight {
-				Rectangle()
-					.fill(Color.accentColor)
-					.frame(width: 2)
-			}
-		}
-	}
-
-	private var rowBody: some View {
-		HStack(alignment: .top, spacing: 8) {
-			Text(timestampText)
-				.font(.system(.caption, design: .monospaced))
-				.foregroundStyle(.secondary)
-				.frame(width: 52, alignment: .trailing)
-
-			switch message.kind {
-			case .privmsg:
-				Text(message.sender)
-					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(senderColor(message.sender))
-				Text(AttributedString.fromIRC(message.content))
-					.font(.system(.body, design: .monospaced))
-					.frame(maxWidth: .infinity, alignment: .leading)
-			case .notice:
-				Text("-\(message.sender)-")
-					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(.orange)
-				Text(AttributedString.fromIRC(message.content))
-					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(.orange)
-					.frame(maxWidth: .infinity, alignment: .leading)
-			case .action:
-				Text("*")
-					.foregroundStyle(.secondary)
-				Text(actionAttributedString)
-					.font(.system(.body, design: .monospaced))
-					.italic()
-					.frame(maxWidth: .infinity, alignment: .leading)
-			default:
-				Text("*")
-					.foregroundStyle(.secondary)
-				Text("\(message.sender) \(message.content)")
-					.font(.system(.body, design: .monospaced))
-					.foregroundStyle(.secondary)
-					.frame(maxWidth: .infinity, alignment: .leading)
-			}
-		}
-		.contextMenu {
-			Button("Copy Message") { copy(plainLogLine) }
-			Button("Copy Text") { copy(IRCFormatting.stripControlCodes(message.content)) }
-			Button("Copy Nickname") { copy(message.sender) }
-		}
-	}
-
-	/// Single-line plain-text rendering of the message suitable for the
-	/// pasteboard. Matches the on-screen layout (timestamp, sender decoration,
-	/// content) with all mIRC control codes stripped.
-	private var plainLogLine: String {
-		let body = IRCFormatting.stripControlCodes(message.content)
-		switch message.kind {
-		case .privmsg:
-			return "[\(timestampText)] <\(message.sender)> \(body)"
-		case .notice:
-			return "[\(timestampText)] -\(message.sender)- \(body)"
-		case .action:
-			return "[\(timestampText)] * \(message.sender) \(body)"
-		default:
-			return "[\(timestampText)] * \(message.sender) \(body)"
-		}
-	}
-
-	private func copy(_ text: String) {
-		let pb = NSPasteboard.general
-		pb.clearContents()
-		pb.setString(text, forType: .string)
-	}
-}
-
-// MARK: - Link preview
-
-/// Returns the first HTTP/HTTPS URL found in `text`, or `nil`.
-@MainActor
-private let _linkDetector: NSDataDetector? = try? NSDataDetector(
-	types: NSTextCheckingResult.CheckingType.link.rawValue,
-)
-
-@MainActor
-private func firstPreviewableURL(in text: String) -> URL? {
-	guard let detector = _linkDetector, !text.isEmpty else { return nil }
-	let range = NSRange(text.startIndex..., in: text)
-	var found: URL?
-	detector.enumerateMatches(in: text, options: [], range: range) { match, _, stop in
-		guard let url = match?.url, let scheme = url.scheme?.lowercased() else { return }
-		if scheme == "http" || scheme == "https" {
-			found = url
-			stop.pointee = true
-		}
-	}
-	return found
-}
-
-/// Inline preview for a single URL. Pulls data from
-/// `AppState.linkPreviews`, kicks off a fetch on appear if nothing is
-/// cached, and collapses to nothing on failure.
-@MainActor
-struct LinkPreviewView: View {
-	let url: URL
-	@Environment(AppState.self) private var appState
-
-	var body: some View {
-		let preview = appState.linkPreviews.preview(for: url)
-		content(for: preview)
-			.onAppear { appState.linkPreviews.fetchIfNeeded(url) }
-	}
-
-	@ViewBuilder
-	private func content(for preview: LinkPreview?) -> some View {
-		switch preview?.status {
-		case .loaded:
-			loadedBody(preview!)
-		case .loading, .none:
-			HStack(spacing: 6) {
-				ProgressView().controlSize(.mini)
-				Text(url.host ?? url.absoluteString)
-					.font(.caption)
-					.foregroundStyle(.secondary)
-					.lineLimit(1)
-			}
-			.padding(.vertical, 2)
-		case .failed:
-			EmptyView()
-		}
-	}
-
-	@ViewBuilder
-	private func loadedBody(_ preview: LinkPreview) -> some View {
-		if preview.isDirectImage {
-			Link(destination: url) {
-				AsyncImage(url: url) { phase in
-					switch phase {
-					case let .success(image):
-						image
-							.resizable()
-							.scaledToFit()
-							.frame(maxWidth: 400, maxHeight: 260, alignment: .leading)
-							.clipShape(RoundedRectangle(cornerRadius: 6))
-					case .failure:
-						EmptyView()
-					default:
-						ProgressView().controlSize(.mini)
-					}
-				}
-			}
-			.buttonStyle(.plain)
-		} else {
-			Link(destination: url) {
-				HStack(alignment: .top, spacing: 10) {
-					if let imageURL = preview.imageURL {
-						AsyncImage(url: imageURL) { phase in
-							switch phase {
-							case let .success(image):
-								image
-									.resizable()
-									.scaledToFill()
-									.frame(width: 60, height: 60)
-									.clipShape(RoundedRectangle(cornerRadius: 4))
-							default:
-								RoundedRectangle(cornerRadius: 4)
-									.fill(.quaternary)
-									.frame(width: 60, height: 60)
-							}
-						}
-					}
-					VStack(alignment: .leading, spacing: 2) {
-						Text(preview.siteName ?? url.host ?? url.absoluteString)
-							.font(.caption)
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-						if let title = preview.title, !title.isEmpty {
-							Text(title)
-								.font(.system(.body, weight: .medium))
-								.foregroundStyle(.primary)
-								.lineLimit(2)
-						}
-						if let summary = preview.summary, !summary.isEmpty {
-							Text(summary)
-								.font(.caption)
-								.foregroundStyle(.secondary)
-								.lineLimit(3)
-						}
-					}
-					Spacer(minLength: 0)
-				}
-				.padding(10)
-				.background {
-					RoundedRectangle(cornerRadius: 8)
-						.fill(.regularMaterial)
-				}
-				.overlay {
-					RoundedRectangle(cornerRadius: 8)
-						.strokeBorder(.quaternary.opacity(0.8), lineWidth: 1)
-				}
-			}
-			.buttonStyle(.plain)
-		}
 	}
 }
 
