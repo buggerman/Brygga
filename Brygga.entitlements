@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Master switch. Required for any Mac App Store submission. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Outbound TCP / TLS for `IRCConnection` (Network.framework) and
+	     for `LinkPreviewStore` / link-preview image fetches (URLSession).
+	     No `network.server` — Brygga never accepts inbound connections. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Read-only access to files the user picks via NSOpenPanel. Used by
+	     ConnectSheet's "Choose…" button for the PKCS#12 client certificate.
+	     Read-only is the minimum needed: we copy the bytes once at connect
+	     time, we don't write back to the user's path. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+</dict>
+</plist>
