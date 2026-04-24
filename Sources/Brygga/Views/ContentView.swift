@@ -764,8 +764,10 @@ struct ServerConsoleHeader: View {
 
 struct ServerMessageList: View {
 	let server: Server
+	@Environment(AppState.self) private var appState
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
 	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
+	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 
 	var body: some View {
 		MessageBufferView(
@@ -773,6 +775,8 @@ struct ServerMessageList: View {
 			lastReadMessageID: nil,
 			nickColorsEnabled: nickColorsEnabled,
 			timestampFormat: timestampFormat,
+			linkPreviewsEnabled: linkPreviewsEnabled,
+			linkPreviews: appState.linkPreviews,
 		)
 	}
 }
@@ -841,9 +845,11 @@ struct TopicBar: View {
 struct MessageList: View {
 	let channel: Channel
 	var findQuery: String = ""
+	@Environment(AppState.self) private var appState
 	@AppStorage(PreferencesKeys.showJoinsParts) private var showJoinsParts = true
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
 	@AppStorage(PreferencesKeys.timestampFormat) private var timestampFormat: String = "system"
+	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 
 	private var visibleMessages: [Message] {
 		var messages: [Message] = if showJoinsParts {
@@ -880,6 +886,8 @@ struct MessageList: View {
 			lastReadMessageID: effectiveLastReadID,
 			nickColorsEnabled: nickColorsEnabled,
 			timestampFormat: timestampFormat,
+			linkPreviewsEnabled: linkPreviewsEnabled,
+			linkPreviews: appState.linkPreviews,
 		)
 	}
 }
