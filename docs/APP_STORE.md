@@ -10,8 +10,8 @@ What needs to be in place before Brygga can submit, what's done, and what's stil
 | Sandboxed build path | ✅ Done | `./Scripts/build-app.sh release --sandboxed` |
 | Encryption-export declaration | ✅ Done | `ITSAppUsesNonExemptEncryption=false` in Info.plist |
 | App Store category | ✅ Done | `LSApplicationCategoryType=public.app-category.social-networking` in Info.plist |
-| About / Acknowledgements panel (BSD-3-Clause notice) | ⏳ Pending | follow-up PR |
-| Report-user / report-message affordance (Guideline 1.2) | ⏳ Pending | follow-up PR — links to a GitHub issue template |
+| About / Acknowledgements panel (BSD-3-Clause notice) | ✅ Done | `Sources/Brygga/Acknowledgements.swift` + `CommandGroup(replacing: .appInfo)` in `BryggaApp.swift` |
+| Report-user affordance (Guideline 1.2) | ✅ Done | UserListView right-click → "Report User…" → `ReportLink.openUserReport` → `.github/ISSUE_TEMPLATE/user-report.yml` |
 | App Privacy disclosure draft | ⏳ Pending | follow-up PR |
 | App Store listing copy + age rating | ⏳ Pending | follow-up PR |
 | Apple Distribution certificate | 🔒 Gated by $99/yr | submission day |

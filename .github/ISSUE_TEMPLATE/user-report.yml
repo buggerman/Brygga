@@ -1,0 +1,45 @@
+name: User report
+description: Report a user or message encountered through Brygga
+title: "[Report] "
+labels: ["user-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Brygga is an IRC client; network operators (ChanServ, etc.) own moderation on each network.
+
+        Use this form when something needs Brygga's attention specifically — for example, the client failed to honour an `/ignore`, displayed something it shouldn't have, or surfaced a user-experience issue around abusive behaviour. For pure on-network moderation issues, contact the channel ops on the network itself.
+
+  - type: input
+    id: network
+    attributes:
+      label: Network
+      description: Server name or host you were connected to.
+      placeholder: "e.g. Libera.Chat"
+    validations:
+      required: false
+
+  - type: input
+    id: channel
+    attributes:
+      label: Channel or query
+      description: Where the user appeared (channel name including `#`, or the nickname for a private message).
+      placeholder: "e.g. #brygga"
+    validations:
+      required: false
+
+  - type: input
+    id: nickname
+    attributes:
+      label: Reported nickname
+      placeholder: "e.g. SomeUser"
+    validations:
+      required: false
+
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened
+      description: What did the user or message do? What did you expect Brygga to do? Please don't paste personally identifying information about the reported user beyond their public IRC nickname.
+    validations:
+      required: true
