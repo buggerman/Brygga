@@ -43,6 +43,13 @@ struct BryggaApp: App {
 		.windowStyle(.titleBar)
 		.defaultSize(width: 1200, height: 780)
 		.commands {
+			// Replace SwiftUI's default "About Brygga" with one that
+			// surfaces the BSD-3-Clause notice in the credits area —
+			// satisfies the binary-redistribution clause and the App
+			// Store license-disclosure expectation.
+			CommandGroup(replacing: .appInfo) {
+				Button("About Brygga") { Acknowledgements.showAboutPanel() }
+			}
 			CommandMenu("Server") {
 				Button("New Server\u{2026}") { appState.showingConnectSheet = true }
 					.keyboardShortcut("n", modifiers: [.command, .shift])
