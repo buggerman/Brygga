@@ -16,8 +16,8 @@ Brygga is a native macOS IRC client written in pure Swift + SwiftUI. The goal is
 
 ## Layout
 
-- `Sources/BryggaCore/` — library target. IRC protocol, `IRCConnection` (actor) + `IRCSession` (`@MainActor`), `@Observable` models (`Server`, `Channel`, `User`, `Message`), persistence (`ServerStore`, `ScrollbackStore`, `DiskLogger`), `LinkPreviewStore`, `KnownNetworks`, `EmojiShortcodes`, `MarkdownInputTransform`, `PreferencesKeys`, `SCRAMSHA256`, `ClientIdentity`.
-- `Sources/Brygga/` — executable target. `@main` entry point, `BryggaApp` scene graph, all SwiftUI views, `AppDelegate` adapter.
+- `Sources/BryggaCore/` — library target. IRC protocol, `IRCConnection` (actor) + `IRCSession` (`@MainActor`), `@Observable` models (`Server`, `Channel`, `User`, `Message`), persistence (`ServerStore`, `ScrollbackStore`, `DiskLogger`), `LinkPreviewStore`, `IRCFormatting` (mIRC control codes + `stripControlCodes`), `ChatFold` (`foldPresenceRuns` + `presenceRunSummary`), `KnownNetworks`, `EmojiShortcodes`, `MarkdownInputTransform`, `PreferencesKeys`, `SCRAMSHA256`, `ClientIdentity`.
+- `Sources/Brygga/` — executable target. `@main` entry point, `BryggaApp` scene graph, SwiftUI views under `Views/`, and `MessageBufferView` — the `NSViewRepresentable` that hosts the chat buffer on an `NSTextView`. `AppDelegate` adapter lives here too.
 - `Tests/` — XCTest. **Only** `@testable import BryggaCore`. Importing the `Brygga` target breaks linkage because of `@main`. There is no UI-test target.
 - `Resources/` — icon source art, generated `AppIcon.iconset/`, `AppIcon.icns`. Don't hand-regenerate unless the source art changes.
 - `Scripts/build-app.sh` — wraps the SPM-built binary into `build/Brygga.app` with a proper `Info.plist`. A raw `swift run Brygga` does **not** activate as a GUI app — always use the script or the bundle.
@@ -43,7 +43,10 @@ Install SwiftFormat once with `brew install swiftformat`. Config lives in `.swif
 - **`IRCSession`** is `@MainActor`. It consumes `connection.messages` / `connection.stateChanges` (both `AsyncStream`) in `Task { @MainActor … for await … }` loops spawned from `start()`, and mutates `@Observable` models that SwiftUI renders.
 - **`AppState`** is the single `@MainActor @Observable` root. It owns `servers: [Server]` and `sessions: [String: IRCSession]` keyed by `server.id`.
 - All model mutation must happen on the main actor so SwiftUI observation fires on the right thread.
-- Do **not** introduce Objective-C, ObjC bridging, C interop, or `@objc` on new APIs. Pure Swift by design.
+- **Chat buffer is AppKit-backed.** `MessageBufferView: NSViewRepresentable` wraps `NSScrollView` + non-editable `NSTextView`, because SwiftUI `.textSelection(.enabled)` only permits selection inside one `Text` — drag-selecting across rows is impossible in pure SwiftUI. The `Coordinator` owns per-view presentation state (`expandedRunIDs`, `images: [URL: NSImage]` cache, `lastApply` args); that state does **not** belong on the `@Observable` models because it's view-specific.
+- **Link previews** render inline as `NSTextAttachment` cells via the `LinkPreviewAttachmentCell: NSTextAttachmentCell` subclass inside `MessageBufferView.swift`. Metadata comes from `LinkPreviewStore`; image bytes are fetched once per Coordinator lifetime via `URLSession.ephemeral` (10 s timeout, 2 MB cap, http/https only).
+- **Presence-run collapse** uses `BryggaCore.foldPresenceRuns(_:) -> [ChatEntry]` to collapse consecutive JOIN / PART / QUIT / NICK into a single summary row, and `presenceRunSummary(_:) -> String` for the display text. The Coordinator tags runs with a `brygga-toggle-run://<uuid>` link and intercepts clicks in `textView(_:clickedOnLink:at:)` to toggle expansion. The append fast-path is disabled in collapse mode because a new message can reshape the tail run.
+- **Pure Swift.** Do not introduce Objective-C source files, bridging headers, or C interop. Keep `@objc` off any new *public* API. A private `@objc` selector callback required by an AppKit target-action contract (e.g. an `NSMenuItem` target) is the only acceptable exception — keep it private and scoped to the Coordinator.
 
 ## Persistence
 
@@ -56,10 +59,12 @@ name, host, port, useTLS, nickname,
 saslAccount, saslPassword,
 clientCertificatePath, clientCertificatePassphrase,
 autoJoinChannels, openQueries,
-ignoreList, notifyList, performCommands, pinnedChannels
+ignoreList, notifyList, performCommands, pinnedChannels,
+channelPresenceCollapse
 ```
 
-- `AppState.persist()` writes on any change that affects any of the above: `addServer`, `removeServer`, own JOIN/PART/KICK/NICK, query-tab creation (incoming PM or outgoing `/msg` / `/query`), pin toggle, ignore/notify/perform edits.
+- `channelPresenceCollapse: [String: Bool]?` — per-channel overrides for the "collapse join/leave runs" preference, keyed by lowercased channel name. `true` = always collapse, `false` = never, key absent = inherit the global default.
+- `AppState.persist()` writes on any change that affects any of the above: `addServer`, `removeServer`, own JOIN/PART/KICK/NICK, query-tab creation (incoming PM or outgoing `/msg` / `/query`), pin toggle, ignore/notify/perform edits, per-channel collapse override.
 - Writes are suppressed while `isRestoring == true` during `AppState.restoreFromStore()` to avoid torn snapshots on launch.
 
 Other on-disk state:
@@ -81,6 +86,8 @@ Other on-disk state:
 - SPM does **not** auto-define `DEBUG`. `#if DEBUG` blocks are compiled out in both `swift build` and `swift build -c release`. Use runtime flags or always-on diagnostics.
 - `@State` may be preserved across what looks like view re-creation when SwiftUI reuses identity. If you want clean state on selection change, add `.id(<something-that-changes>)` to the view.
 - `UNUserNotificationCenter.current()` throws when `Bundle.main.bundleURL.pathExtension != "app"` (i.e. running in xctest). Guard before calling.
+- **`.textSelection(.enabled)` does not cross `Text` boundaries.** Anything that needs mIRC-style drag-select across rows must be backed by `NSTextView` via `NSViewRepresentable` — see `MessageBufferView`. Don't try to fix cross-row selection in pure SwiftUI; the primitive is deliberately limited.
+- **Observing a store from inside an `NSViewRepresentable.Coordinator`**: SwiftUI's body-read observation doesn't help. Use `withObservationTracking { _ = store.property }` inside the Coordinator and re-register in the `onChange` closure — that's how `MessageBufferView` reacts to `LinkPreviewStore` changes without going through the SwiftUI update cycle.
 
 ## IRC etiquette (do not ignore)
 
@@ -109,7 +116,10 @@ Other on-disk state:
 ## Commits, branches, PRs
 
 - Default branch: `main`. Feature work goes on a branch; never force-push `main`.
-- **No AI attribution**: never add `Co-Authored-By: Claude` (or similar) to commits, code, or PRs. This includes trailers, footers, and PR bodies.
+- **AI-assisted contributions are welcome, and attribution is required.** If you used an AI assistant (Claude, Copilot, Cursor, etc.) at any stage of drafting or refining the change, you **must**:
+  - Add a `Co-Authored-By:` trailer on the commit naming the assistant — e.g. `Co-Authored-By: Claude <noreply@anthropic.com>`.
+  - Include the prompt you gave the assistant in the commit body (or in the PR body if the prompt evolved across commits). Paste it verbatim rather than paraphrasing — it's more useful to reviewers and future contributors as a concrete example of what produced the output.
+  - Review the output carefully before pushing — you're still responsible for correctness, taste, and the repo-specific rules in this file.
 - Commit messages: one-line imperative summary, optional body. No emoji prefixes. No conventional-commits `feat:` / `fix:` prefixes.
 - `swift test` must pass before every commit.
 
@@ -135,12 +145,15 @@ Other on-disk state:
 
   ## Risk / rollback
   Anything a reviewer should worry about, and how to revert if it breaks.
+
+  ## AI assistance
+  If an AI assistant helped with this change, name it and paste the prompt(s) verbatim. Required whenever any commit in the PR carries a `Co-Authored-By:` trailer. Put `None` if the whole PR was written by hand.
   ```
 
 - **Screenshots required** for any change that alters window chrome, sidebar, chat area, inspector, or any visible control. Recordings beat screenshots for state / selection / animation changes.
 - **Test plan is mandatory.** Docs-only PRs write `N/A, docs only`. Behaviour changes require reviewer-reproducible manual steps.
 - **CI must be green** before requesting review. Open as Draft for WIP; flip to Ready when CI passes and the body is complete.
-- **Do not merge your own PR** unless it's docs-only or the user explicitly asks. Default: push, wait for review.
+- **Do not merge your own PR** unless it's docs-only or the repo owner explicitly asks. Default: push, wait for review.
 - **`Closes #N`** only when the PR fully resolves the issue. Otherwise `Refs #N`.
 - Squash or rebase; no merge commits on `main`. History stays linear.
 
@@ -155,8 +168,7 @@ Other on-disk state:
 
 - Do not create `.app` bundles by hand — use `Scripts/build-app.sh`.
 - Do not regenerate `AppIcon.icns` unless the source art changes.
-- Do not introduce Objective-C, ObjC bridging, or C interop.
+- Do not introduce Objective-C source, bridging headers, or C interop. `@objc` stays off new public APIs (private AppKit target-action selectors are the one exception — see architecture invariants).
 - Do not add `@available` guards; bump the deployment floor instead.
 - Do not hammer Libera / OFTC / other public networks during dev loops.
 - Do not skip commit hooks (`--no-verify`).
-- Do not add AI attribution anywhere in the history.
