@@ -1891,6 +1891,7 @@ struct UserListView: View {
 						.font(.system(.body, design: .monospaced))
 						.foregroundStyle(color(for: user.nickname))
 				}
+				.listRowSeparator(.hidden)
 				.contextMenu {
 					userRowMenu(for: user.nickname, channelName: channel.name)
 				}
