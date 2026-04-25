@@ -69,10 +69,20 @@ struct BryggaApp: App {
 			CommandMenu("Channel") {
 				Button("Join Channel\u{2026}") { appState.showingQuickJoin = true }
 					.keyboardShortcut("j", modifiers: [.command])
-				Button("Leave Channel") {
-					guard let channel = appState.selectedChannel,
-					      let session = appState.selectedSession else { return }
-					Task { try? await session.part(channel.name) }
+				// Cmd+W: PART for regular channels, close-tab for PMs.
+				// `/part` doesn't apply to a query — sending it would be
+				// a server-side error — so a PM tab needs the in-memory
+				// removal path on `AppState`.
+				Button(appState.selectedChannel?.isPrivateMessage == true
+					? "Close Private Message"
+					: "Leave Channel")
+				{
+					guard let channel = appState.selectedChannel else { return }
+					if channel.isPrivateMessage {
+						appState.closePrivateMessage(channelID: channel.id)
+					} else if let session = appState.selectedSession {
+						Task { try? await session.part(channel.name) }
+					}
 				}
 				.keyboardShortcut("w", modifiers: [.command])
 				.disabled(appState.selectedChannel == nil)
