@@ -1537,50 +1537,46 @@ struct CompletionPopover: View {
 
 // MARK: - Global find (cross-channel)
 
-private struct GlobalFindMatch: Identifiable {
-	let id = UUID()
-	let serverName: String
-	let channelName: String
-	let channelID: String
-	let message: Message
-}
-
 @MainActor
 struct GlobalFindSheet: View {
 	@Environment(AppState.self) private var appState
 	@Environment(\.dismiss) private var dismiss
 	@State private var query: String = ""
+	@State private var scope: ScopeUI = .all
+	@State private var hits: [SearchHit] = []
 	@FocusState private var queryFocused: Bool
 
-	private var matches: [GlobalFindMatch] {
-		let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
-		guard !needle.isEmpty else { return [] }
-		var out: [GlobalFindMatch] = []
-		for server in appState.servers {
-			for channel in server.channels {
-				for message in channel.messages
-					where message.content.lowercased().contains(needle)
-					|| message.sender.lowercased().contains(needle)
-				{
-					out.append(GlobalFindMatch(
-						serverName: server.name,
-						channelName: channel.name,
-						channelID: channel.id,
-						message: message,
-					))
-				}
+	enum ScopeUI: Hashable, CaseIterable {
+		case all, server, channel
+	}
+
+	private var resolvedScope: SearchScope {
+		switch scope {
+		case .all:
+			.all
+		case .server:
+			if let s = appState.selectedServer { .server(id: s.id) } else { .all }
+		case .channel:
+			if let ch = appState.selectedChannel,
+			   let s = appState.servers.first(where: { $0.channels.contains { $0.id == ch.id } })
+			{
+				.channel(serverID: s.id, target: ch.name)
+			} else {
+				.all
 			}
 		}
-		// Newest first, capped so a huge scrollback doesn't freeze layout.
-		return out.sorted(by: { $0.message.timestamp > $1.message.timestamp })
-			.prefix(300)
-			.map(\.self)
+	}
+
+	/// Composite key for `.task(id:)` so a change to either scope or query
+	/// cancels and reissues the search.
+	private var searchID: String {
+		"\(scope)|\(query)"
 	}
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 0) {
 			HStack {
-				Text("Find in All Channels")
+				Text("Search Scrollback")
 					.font(.headline)
 				Spacer()
 				Button("Done") { dismiss() }
@@ -1593,11 +1589,11 @@ struct GlobalFindSheet: View {
 			HStack(spacing: 8) {
 				Image(systemName: "magnifyingglass")
 					.foregroundStyle(.secondary)
-				TextField("Search across every channel and query\u{2026}", text: $query)
+				TextField("Phrase, prefix*, sender:alice, term1 AND term2\u{2026}", text: $query)
 					.textFieldStyle(.plain)
 					.focused($queryFocused)
 					.onSubmit {
-						if let first = matches.first { open(first) }
+						if let first = hits.first { open(first) }
 					}
 			}
 			.padding(10)
@@ -1605,90 +1601,138 @@ struct GlobalFindSheet: View {
 			.padding(.horizontal, 20)
 			.padding(.bottom, 8)
 
+			Picker("Scope", selection: $scope) {
+				Text("All servers").tag(ScopeUI.all)
+				Text("This server").tag(ScopeUI.server)
+				Text("This channel").tag(ScopeUI.channel)
+			}
+			.pickerStyle(.segmented)
+			.disabled(scopePickerDisabled)
+			.padding(.horizontal, 20)
+			.padding(.bottom, 8)
+
 			Divider()
 
-			if query.trimmingCharacters(in: .whitespaces).isEmpty {
-				ContentUnavailableView {
-					Label("Start typing", systemImage: "magnifyingglass")
-				} description: {
-					Text("Search content and senders across every channel and query.")
-				}
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
-			} else if matches.isEmpty {
-				ContentUnavailableView {
-					Label("No matches", systemImage: "magnifyingglass")
-				} description: {
-					Text("Nothing in scrollback matches \u{201C}\(query)\u{201D}.")
-				}
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
-			} else {
-				List(matches) { match in
-					Button {
-						open(match)
-					} label: {
-						GlobalFindMatchRow(match: match, needle: query)
-					}
-					.buttonStyle(.plain)
-				}
-				.listStyle(.plain)
-			}
+			content
 		}
 		.frame(minWidth: 560, minHeight: 420)
 		.onAppear { queryFocused = true }
+		.task(id: searchID) {
+			await runSearch()
+		}
 	}
 
-	private func open(_ match: GlobalFindMatch) {
-		appState.selection = match.channelID
+	@ViewBuilder
+	private var content: some View {
+		if query.trimmingCharacters(in: .whitespaces).isEmpty {
+			ContentUnavailableView {
+				Label("Start typing", systemImage: "magnifyingglass")
+			} description: {
+				Text("Searches every persisted message — including channels not currently open. Powered by SQLite FTS5.")
+			}
+			.frame(maxWidth: .infinity, maxHeight: .infinity)
+		} else if hits.isEmpty {
+			ContentUnavailableView {
+				Label("No matches", systemImage: "magnifyingglass")
+			} description: {
+				Text("Nothing in scrollback matches \u{201C}\(query)\u{201D}.")
+			}
+			.frame(maxWidth: .infinity, maxHeight: .infinity)
+		} else {
+			List(hits, id: \.messageID) { hit in
+				Button {
+					open(hit)
+				} label: {
+					SearchHitRow(hit: hit, displayContext: displayContext(for: hit))
+				}
+				.buttonStyle(.plain)
+			}
+			.listStyle(.plain)
+		}
+	}
+
+	/// "This channel" / "This server" only make sense when the user has a
+	/// matching selection. Disable the segments instead of silently
+	/// down-grading to All so the picker communicates *why* nothing
+	/// happens.
+	private var scopePickerDisabled: Bool {
+		switch scope {
+		case .all: false
+		case .server: appState.selectedServer == nil
+		case .channel: appState.selectedChannel == nil
+		}
+	}
+
+	private func runSearch() async {
+		// Coalesce keystrokes — FTS5 itself is sub-ms but the Picker / view
+		// rebuilds add up. 120ms feels live without spamming the actor.
+		try? await Task.sleep(for: .milliseconds(120))
+		guard !Task.isCancelled else { return }
+		let q = query
+		let s = resolvedScope
+		let result = await ScrollbackIndex.shared.search(q, scope: s)
+		guard !Task.isCancelled else { return }
+		hits = result
+	}
+
+	private func open(_ hit: SearchHit) {
+		// Server-console hits navigate to the server row; channel hits
+		// navigate to the channel id. If the channel was closed since
+		// indexing, fall back to the server row so the user lands
+		// somewhere sensible rather than a no-op.
+		if hit.target == "__server__" {
+			appState.selection = hit.serverID
+		} else if let server = appState.servers.first(where: { $0.id == hit.serverID }),
+		          let channel = server.channels.first(where: { $0.name == hit.target })
+		{
+			appState.selection = channel.id
+		} else {
+			appState.selection = hit.serverID
+		}
 		dismiss()
+	}
+
+	private func displayContext(for hit: SearchHit) -> SearchHitContext {
+		let serverName = appState.servers.first(where: { $0.id == hit.serverID })?.name ?? hit.serverID
+		let targetName = hit.target == "__server__" ? "(server console)" : hit.target
+		return SearchHitContext(serverName: serverName, targetName: targetName)
 	}
 }
 
-private struct GlobalFindMatchRow: View {
-	let match: GlobalFindMatch
-	let needle: String
+private struct SearchHitContext {
+	let serverName: String
+	let targetName: String
+}
+
+private struct SearchHitRow: View {
+	let hit: SearchHit
+	let displayContext: SearchHitContext
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 2) {
 			HStack(spacing: 6) {
-				Text(match.serverName)
+				Text(displayContext.serverName)
 					.foregroundStyle(.secondary)
 				Text("/")
 					.foregroundStyle(.tertiary)
-				Text(match.channelName)
+				Text(displayContext.targetName)
 					.foregroundStyle(.primary)
 				Spacer()
-				Text(match.message.timestamp, format: .dateTime.hour().minute())
+				Text(hit.timestamp, format: .dateTime.hour().minute())
 					.font(.caption)
 					.foregroundStyle(.secondary)
 			}
 			.font(.caption.weight(.medium))
 
 			HStack(alignment: .firstTextBaseline, spacing: 6) {
-				Text(match.message.sender)
+				Text(hit.sender)
 					.font(.system(.body, design: .monospaced))
 					.foregroundStyle(.secondary)
-				Text(snippet)
+				Text(hit.content)
 					.lineLimit(2)
 			}
 		}
 		.padding(.vertical, 2)
-	}
-
-	/// Centre a ~80-char window around the first match so long lines don't
-	/// push the hit off-screen.
-	private var snippet: String {
-		let content = match.message.content
-		let needleLower = needle.lowercased()
-		guard !needleLower.isEmpty,
-		      let range = content.lowercased().range(of: needleLower)
-		else { return content }
-		let radius = 40
-		let start: String.Index = content.index(range.lowerBound, offsetBy: -radius, limitedBy: content.startIndex) ?? content.startIndex
-		let end: String.Index = content.index(range.upperBound, offsetBy: radius, limitedBy: content.endIndex) ?? content.endIndex
-		let leading = start > content.startIndex ? "\u{2026}" : ""
-		let trailing = end < content.endIndex ? "\u{2026}" : ""
-		let middle = String(content[start ..< end])
-		return leading + middle + trailing
 	}
 }
 
