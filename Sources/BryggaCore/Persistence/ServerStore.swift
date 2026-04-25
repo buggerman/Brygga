@@ -39,12 +39,20 @@ public enum ServerStore {
 		/// `CHATHISTORY AFTER` on reconnect / cold start so the server
 		/// replays only what we missed while disconnected.
 		public var channelLastSeenMsgID: [String: String]?
+		/// soju netid the connection is locked to via `BOUNCER BIND`.
+		/// Set on Server entries the user added from a discovered
+		/// network in the bouncer-networks popover; the connection
+		/// sends BIND during CAP negotiation so all subsequent chat
+		/// traffic is scoped to that single upstream network.
+		/// `nil` for non-bouncer servers and for the bouncer's
+		/// discovery / control connection.
+		public var bouncerNetID: String?
 
 		enum CodingKeys: String, CodingKey {
 			case id, name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
 			     saslAccount, saslPassword, ignoreList, notifyList, performCommands,
 			     pinnedChannels, clientCertificatePath, clientCertificatePassphrase,
-			     channelPresenceCollapse, channelLastSeenMsgID
+			     channelPresenceCollapse, channelLastSeenMsgID, bouncerNetID
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -72,6 +80,7 @@ public enum ServerStore {
 			clientCertificatePassphrase = try c.decodeIfPresent(String.self, forKey: .clientCertificatePassphrase)
 			channelPresenceCollapse = try c.decodeIfPresent([String: Bool].self, forKey: .channelPresenceCollapse)
 			channelLastSeenMsgID = try c.decodeIfPresent([String: String].self, forKey: .channelLastSeenMsgID)
+			bouncerNetID = try c.decodeIfPresent(String.self, forKey: .bouncerNetID)
 		}
 
 		/// Custom encode deliberately skips `saslPassword` and
@@ -97,6 +106,7 @@ public enum ServerStore {
 			// saslPassword and clientCertificatePassphrase: intentionally omitted.
 			try c.encodeIfPresent(channelPresenceCollapse, forKey: .channelPresenceCollapse)
 			try c.encodeIfPresent(channelLastSeenMsgID, forKey: .channelLastSeenMsgID)
+			try c.encodeIfPresent(bouncerNetID, forKey: .bouncerNetID)
 		}
 
 		public init(
@@ -118,6 +128,7 @@ public enum ServerStore {
 			clientCertificatePassphrase: String? = nil,
 			channelPresenceCollapse: [String: Bool]? = nil,
 			channelLastSeenMsgID: [String: String]? = nil,
+			bouncerNetID: String? = nil,
 		) {
 			self.id = id
 			self.name = name
@@ -137,6 +148,7 @@ public enum ServerStore {
 			self.clientCertificatePassphrase = clientCertificatePassphrase
 			self.channelPresenceCollapse = channelPresenceCollapse
 			self.channelLastSeenMsgID = channelLastSeenMsgID
+			self.bouncerNetID = bouncerNetID
 		}
 	}
 

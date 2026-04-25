@@ -60,6 +60,15 @@ public final class Server: Identifiable {
 	/// non-bouncer servers. Transient — discovered fresh each
 	/// connect; not persisted.
 	public var bouncerNetworks: [BouncerNetwork] = []
+	/// soju netid this connection is locked to via `BOUNCER BIND`.
+	/// Set on Server entries the user adds from a discovered network
+	/// in the bouncer-networks popover; the connection sends BIND
+	/// during CAP negotiation so all subsequent chat traffic is
+	/// scoped to that single upstream network. `nil` for non-bouncer
+	/// servers and for the discovery / control Server entry of a
+	/// bouncer (the unbound connection that fronts LISTNETWORKS).
+	/// Persisted via `ServerConfig.bouncerNetID`.
+	public var bouncerNetID: String?
 
 	public init(
 		id: String? = nil,

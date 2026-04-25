@@ -173,6 +173,7 @@ public final class AppState {
 			)
 			server.presenceCollapseOverrides = config.channelPresenceCollapse ?? [:]
 			server.lastSeenMsgIDs = config.channelLastSeenMsgID ?? [:]
+			server.bouncerNetID = config.bouncerNetID
 			// Pre-create Channel objects for auto-join channels so the async
 			// scrollback rehydrate below has somewhere to land. Without this,
 			// the channel doesn't exist until the server responds to our
@@ -255,6 +256,7 @@ public final class AppState {
 					? nil : server.presenceCollapseOverrides,
 				channelLastSeenMsgID: server.lastSeenMsgIDs.isEmpty
 					? nil : server.lastSeenMsgIDs,
+				bouncerNetID: server.bouncerNetID,
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)
@@ -363,6 +365,7 @@ public final class AppState {
 		pinnedChannels: [String] = [],
 		clientCertificatePath: String? = nil,
 		clientCertificatePassphrase: String? = nil,
+		bouncerNetID: String? = nil,
 	) -> Server {
 		let server = Server(
 			id: id,
@@ -380,6 +383,7 @@ public final class AppState {
 		server.pinnedChannels = pinnedChannels.map { $0.lowercased() }
 		server.clientCertificatePath = clientCertificatePath
 		server.clientCertificatePassphrase = clientCertificatePassphrase
+		server.bouncerNetID = bouncerNetID
 		// Write-through secrets to Keychain on every addServer invocation
 		// (restore, Connect sheet, test fixtures). Empty / nil values
 		// become deletions, so clearing a password in the sheet removes
@@ -395,6 +399,7 @@ public final class AppState {
 			saslPassword: saslPassword,
 			clientCertificatePath: clientCertificatePath,
 			clientCertificatePassphrase: clientCertificatePassphrase,
+			bouncerNetID: bouncerNetID,
 		)
 		let session = IRCSession(server: server, connection: connection)
 		session.autoJoinChannels = autoJoinChannels
@@ -417,6 +422,33 @@ public final class AppState {
 
 		persist()
 		return server
+	}
+
+	/// Spawn a sibling Server entry that connects to the same bouncer
+	/// host as `parent`, but bound to a single upstream network via
+	/// `BOUNCER BIND <netid>`. Used by the bouncer-networks popover
+	/// when the user clicks "Add as server" on a discovered network.
+	/// Reuses the parent's TLS / nickname / SASL settings; the new
+	/// Server gets its own connection (soju is fine with multiple
+	/// concurrent client connections on different network IDs).
+	@discardableResult
+	public func addBouncerNetwork(
+		_ network: BouncerNetwork,
+		on parent: Server,
+	) -> Server {
+		let display = network.name ?? network.host ?? network.id
+		return addServer(
+			name: display,
+			host: parent.host,
+			port: UInt16(parent.port),
+			useTLS: parent.useTLS,
+			nickname: parent.nickname,
+			saslAccount: parent.saslAccount,
+			saslPassword: parent.saslPassword,
+			clientCertificatePath: parent.clientCertificatePath,
+			clientCertificatePassphrase: parent.clientCertificatePassphrase,
+			bouncerNetID: network.id,
+		)
 	}
 
 	/// User-initiated disconnect for a single server. Keeps the server in
