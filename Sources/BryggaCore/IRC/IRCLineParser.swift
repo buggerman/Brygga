@@ -113,6 +113,15 @@ public enum IRCLineParser {
 
 	// MARK: - Private
 
+	/// Parse a `;`-separated, IRCv3-tag-escape-decoded attribute
+	/// string. Same shape as message tags but without the leading `@`.
+	/// Used for `BOUNCER NETWORK <netid> name=…;state=…;…` where the
+	/// soju spec reuses the message-tag format for the attribute
+	/// argument.
+	public static func parseAttributeString(_ raw: String) -> [String: String] {
+		parseTags(Substring(raw))
+	}
+
 	/// Parse IRCv3 message tags: "key1=value1;key2;key3=value3"
 	private static func parseTags(_ raw: Substring) -> [String: String] {
 		var result: [String: String] = [:]

@@ -304,6 +304,7 @@ public final class IRCSession {
 		case "ACCOUNT": handleAccount(message)
 		case "AWAY": handleAway(message)
 		case "BATCH": handleBatch(message)
+		case "BOUNCER": handleBouncer(message)
 		case "CAP": break // CAP traffic is handled in IRCConnection; suppress server-log noise here
 		default:
 			// Surface unhandled protocol traffic in the server console so users
@@ -469,6 +470,7 @@ public final class IRCSession {
 			for line in server.performCommands {
 				Task { try? await connection.send(line) }
 			}
+			requestBouncerNetworksIfNeeded()
 		case 332:
 			handleTopicReply(message)
 		case 353:
@@ -854,6 +856,84 @@ public final class IRCSession {
 		let formatter = ISO8601DateFormatter()
 		formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 		return formatter.string(from: date)
+	}
+
+	// MARK: - bouncer-networks (soju)
+
+	/// Send `BOUNCER LISTNETWORKS` once on welcome when the
+	/// `soju.im/bouncer-networks` cap was negotiated, so we get the
+	/// initial list of networks the bouncer is fronting. With
+	/// `soju.im/bouncer-networks-notify` also negotiated the bouncer
+	/// will additionally push BOUNCER NETWORK lines on changes —
+	/// `handleBouncer` updates `server.bouncerNetworks` in either case.
+	private func requestBouncerNetworksIfNeeded() {
+		let conn = connection
+		Task { [weak self] in
+			let caps = await conn.enabledCaps
+			guard caps.contains("soju.im/bouncer-networks") else { return }
+			await MainActor.run {
+				self?.recordServer(Message(
+					sender: "*",
+					content: "discovering bouncer networks",
+					kind: .server,
+				))
+			}
+			try? await conn.send("BOUNCER LISTNETWORKS")
+		}
+	}
+
+	private func handleBouncer(_ message: IRCLineParserResult) {
+		guard message.params.count >= 2 else { return }
+		let sub = message.params[0].uppercased()
+		guard sub == "NETWORK" else {
+			// Layer 2A is read-only: ignore ack lines for ADD / CHANGE /
+			// DEL subcommands the user can't trigger yet, and FAIL
+			// replies (those flow through the default unhandled path
+			// for visibility in the server console).
+			return
+		}
+		let netid = message.params[1]
+		let attrsRaw = message.params.count >= 3 ? message.params[2] : ""
+
+		// Per the spec, `BOUNCER NETWORK <netid> *` is a removal
+		// notification. Drop the network from local state.
+		if attrsRaw == "*" {
+			if let idx = server.bouncerNetworks.firstIndex(where: { $0.id == netid }) {
+				let removed = server.bouncerNetworks.remove(at: idx)
+				let label = removed.name ?? removed.host ?? netid
+				recordServer(Message(
+					sender: "*",
+					content: "bouncer network \(label) removed",
+					kind: .server,
+				))
+			}
+			return
+		}
+
+		let attributes = IRCLineParser.parseAttributeString(attrsRaw)
+		if let idx = server.bouncerNetworks.firstIndex(where: { $0.id == netid }) {
+			var existing = server.bouncerNetworks[idx]
+			let priorState = existing.state
+			existing.merge(attributes)
+			server.bouncerNetworks[idx] = existing
+			if priorState != existing.state {
+				let label = existing.name ?? existing.host ?? netid
+				recordServer(Message(
+					sender: "*",
+					content: "bouncer network \(label) → \(existing.state.rawValue)",
+					kind: .server,
+				))
+			}
+		} else {
+			let new = BouncerNetwork(id: netid, attributes: attributes)
+			server.bouncerNetworks.append(new)
+			let label = new.name ?? new.host ?? netid
+			recordServer(Message(
+				sender: "*",
+				content: "bouncer network \(label) (\(new.state.rawValue))",
+				kind: .server,
+			))
+		}
 	}
 
 	// MARK: - Perform (post-welcome commands)

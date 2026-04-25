@@ -284,6 +284,13 @@ public actor IRCConnection {
 		"chathistory",
 		"draft/chathistory",
 		"message-tags",
+		// soju-style bouncer discovery + live state notifications.
+		// Negotiated together so we can list networks once on welcome
+		// and then react to BOUNCER NETWORK push messages without
+		// re-polling. Servers that aren't bouncers simply won't
+		// advertise these and the client falls through unaffected.
+		"soju.im/bouncer-networks",
+		"soju.im/bouncer-networks-notify",
 	]
 
 	public private(set) var enabledCaps: Set<String> = []

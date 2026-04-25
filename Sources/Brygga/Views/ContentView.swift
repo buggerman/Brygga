@@ -198,6 +198,16 @@ struct ServerRow: View {
 					.font(.system(size: 9))
 					.foregroundStyle(.secondary)
 			}
+			if !server.bouncerNetworks.isEmpty {
+				HStack(spacing: 2) {
+					Image(systemName: "point.3.connected.trianglepath.dotted")
+						.font(.system(size: 9))
+					Text("\(server.bouncerNetworks.count)")
+						.font(.caption)
+				}
+				.foregroundStyle(.secondary)
+				.help("\(server.bouncerNetworks.count) networks via this bouncer")
+			}
 			Spacer(minLength: 0)
 		}
 	}

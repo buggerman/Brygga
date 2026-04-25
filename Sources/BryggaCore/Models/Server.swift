@@ -53,6 +53,13 @@ public final class Server: Identifiable {
 	/// by the status bar ("last pinged 3s ago") and to detect a stale
 	/// pong that should be discarded.
 	public var lastPingAt: Date?
+	/// Networks advertised by a soju-style bouncer fronting this
+	/// connection. Populated on welcome via `BOUNCER LISTNETWORKS`
+	/// when the `soju.im/bouncer-networks` cap is negotiated; updated
+	/// in real time via `soju.im/bouncer-networks-notify`. Empty for
+	/// non-bouncer servers. Transient — discovered fresh each
+	/// connect; not persisted.
+	public var bouncerNetworks: [BouncerNetwork] = []
 
 	public init(
 		id: String? = nil,
