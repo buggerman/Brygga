@@ -18,6 +18,30 @@ final class AppStateNavigationTests: XCTestCase {
 		return state
 	}
 
+	func testClosePrivateMessageRemovesQueryAndAdvancesSelection() {
+		let state = makeFixture()
+		let pm = Channel(name: "alice")
+		state.servers[0].channels.append(pm)
+		state.selection = pm.id
+
+		state.closePrivateMessage(channelID: pm.id)
+
+		XCTAssertFalse(state.servers[0].channels.contains(where: { $0.id == pm.id }))
+		XCTAssertEqual(state.selection, state.servers[0].id)
+	}
+
+	func testClosePrivateMessageNoOpOnRegularChannel() {
+		let state = makeFixture()
+		let regular = state.servers[0].channels[0]
+		let originalCount = state.servers[0].channels.count
+
+		state.closePrivateMessage(channelID: regular.id)
+
+		// Closing a `#`-prefixed channel must not silently remove it —
+		// regular channels use /part, not the close-tab flow.
+		XCTAssertEqual(state.servers[0].channels.count, originalCount)
+	}
+
 	func testSelectableIDsIsInterleavedServerAndChannels() {
 		let state = makeFixture()
 		let ids = state.selectableIDs

@@ -267,6 +267,28 @@ public final class AppState {
 		ServerStore.save(snapshot())
 	}
 
+	/// Close a private-message tab. Removes the query channel from its
+	/// owning server, advances `selection` to the parent server if the
+	/// closed channel was the active selection, and persists. No-op for
+	/// regular channels — those use `/part` (the "Leave Channel"
+	/// command) and are not user-closable from the sidebar; that
+	/// distinction matches mIRC and prevents accidental data loss
+	/// from a double-clicked context-menu item.
+	public func closePrivateMessage(channelID: String) {
+		guard let serverIdx = servers.firstIndex(where: {
+			$0.channels.contains { $0.id == channelID }
+		}) else { return }
+		let server = servers[serverIdx]
+		guard let channelIdx = server.channels.firstIndex(where: { $0.id == channelID }),
+		      server.channels[channelIdx].isPrivateMessage
+		else { return }
+		server.channels.remove(at: channelIdx)
+		if selection == channelID {
+			selection = server.id
+		}
+		persist()
+	}
+
 	/// Convenience hand-off for the lazy "load older messages" affordance:
 	/// finds the server that owns `channel`, then asks its session to
 	/// fire a `CHATHISTORY BEFORE` request. No-op when the owning

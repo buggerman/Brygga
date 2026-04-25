@@ -88,6 +88,12 @@ struct SidebarView: View {
 									.contextMenu {
 										Button("Unpin") { appState.togglePin(channelID: channel.id) }
 										presenceCollapseSubmenu(for: channel)
+										if channel.isPrivateMessage {
+											Divider()
+											Button("Close") {
+												appState.closePrivateMessage(channelID: channel.id)
+											}
+										}
 									}
 							}
 						}
@@ -122,6 +128,12 @@ struct SidebarView: View {
 											appState.togglePin(channelID: channel.id)
 										}
 										presenceCollapseSubmenu(for: channel)
+										if channel.isPrivateMessage {
+											Divider()
+											Button("Close") {
+												appState.closePrivateMessage(channelID: channel.id)
+											}
+										}
 									}
 							}
 						}
