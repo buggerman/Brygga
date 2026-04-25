@@ -342,17 +342,24 @@ public final class IRCSession {
 			await MainActor.run {
 				channel.messages.insert(contentsOf: msgs, at: 0)
 			}
+			// Cold-start backfill for channels first seen post-launch (JOIN
+			// reply, openQuery, incoming PM). `index` is idempotent on
+			// `msg_id` so on-line writes for the same channel are safe.
+			for msg in msgs {
+				await ScrollbackIndex.shared.index(msg, serverID: sid, target: target)
+			}
 		}
 	}
 
-	/// Persist-through append for a channel message. UI and disk scrollback
-	/// stay in sync.
+	/// Persist-through append for a channel message. UI, JSONL scrollback,
+	/// and the FTS5 search index all stay in sync.
 	public func record(_ message: Message, in channel: Channel) {
 		channel.messages.append(message)
 		let sid = server.id
 		let target = channel.name
 		Task {
 			await ScrollbackStore.shared.append(serverId: sid, target: target, message: message)
+			await ScrollbackIndex.shared.index(message, serverID: sid, target: target)
 		}
 		logToDiskIfEnabled(message, target: target)
 	}
@@ -363,6 +370,7 @@ public final class IRCSession {
 		let sid = server.id
 		Task {
 			await ScrollbackStore.shared.append(serverId: sid, target: "__server__", message: message)
+			await ScrollbackIndex.shared.index(message, serverID: sid, target: "__server__")
 		}
 		logToDiskIfEnabled(message, target: "server")
 	}
@@ -869,6 +877,7 @@ public final class IRCSession {
 						target: target,
 						message: msg,
 					)
+					await ScrollbackIndex.shared.index(msg, serverID: sid, target: target)
 				}
 			}
 		}
