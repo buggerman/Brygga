@@ -834,15 +834,18 @@ struct ServerMessageList: View {
 	@AppStorage(PreferencesKeys.linkPreviewsEnabled) private var linkPreviewsEnabled = true
 
 	var body: some View {
-		MessageBufferView(
-			messages: server.messages,
-			lastReadMessageID: nil,
-			nickColorsEnabled: nickColorsEnabled,
-			timestampFormat: timestampFormat,
-			linkPreviewsEnabled: linkPreviewsEnabled,
-			linkPreviews: appState.linkPreviews,
-			collapsePresenceRuns: false,
-		)
+		VStack(spacing: 0) {
+			BouncerOnboardingBanner(server: server)
+			MessageBufferView(
+				messages: server.messages,
+				lastReadMessageID: nil,
+				nickColorsEnabled: nickColorsEnabled,
+				timestampFormat: timestampFormat,
+				linkPreviewsEnabled: linkPreviewsEnabled,
+				linkPreviews: appState.linkPreviews,
+				collapsePresenceRuns: false,
+			)
+		}
 	}
 }
 
@@ -2245,7 +2248,6 @@ struct DetachedChannelView: View {
 @MainActor
 private struct BouncerNetworksPopover: View {
 	let parent: Server
-	@Environment(AppState.self) private var appState
 	@Environment(\.dismiss) private var dismiss
 
 	var body: some View {
@@ -2258,18 +2260,33 @@ private struct BouncerNetworksPopover: View {
 					.foregroundStyle(.secondary)
 			} else {
 				ForEach(parent.bouncerNetworks) { network in
-					networkRow(network)
+					BouncerNetworkRow(parent: parent, network: network, onAdd: dismiss.callAsFunction)
 				}
 			}
 		}
 		.padding(12)
 		.frame(minWidth: 280, idealWidth: 320)
 	}
+}
 
-	private func networkRow(_ network: BouncerNetwork) -> some View {
+/// One row in a list of bouncer-advertised networks. Shared between the
+/// sidebar popover and the in-console onboarding banner so both surfaces
+/// describe + add networks the same way.
+@MainActor
+private struct BouncerNetworkRow: View {
+	let parent: Server
+	let network: BouncerNetwork
+	/// Optional callback fired after a successful "Add as server" tap so
+	/// the parent surface (popover) can dismiss itself. The banner passes
+	/// `nil` because it stays mounted and re-evaluates its visibility from
+	/// `appState.servers`.
+	var onAdd: (() -> Void)?
+	@Environment(AppState.self) private var appState
+
+	var body: some View {
 		HStack(spacing: 8) {
 			Circle()
-				.fill(stateColor(network.state))
+				.fill(stateColor)
 				.frame(width: 8, height: 8)
 			VStack(alignment: .leading, spacing: 1) {
 				Text(network.name ?? network.host ?? network.id)
@@ -2281,18 +2298,21 @@ private struct BouncerNetworksPopover: View {
 				}
 			}
 			Spacer(minLength: 8)
-			if alreadyAdded(network) {
+			if alreadyAdded {
 				Text("Added")
 					.font(.caption)
 					.foregroundStyle(.secondary)
 			} else {
-				Button("Add as server") { add(network) }
-					.controlSize(.small)
+				Button("Add as server") {
+					appState.addBouncerNetwork(network, on: parent)
+					onAdd?()
+				}
+				.controlSize(.small)
 			}
 		}
 	}
 
-	private func alreadyAdded(_ network: BouncerNetwork) -> Bool {
+	private var alreadyAdded: Bool {
 		appState.servers.contains { other in
 			other.id != parent.id
 				&& other.host == parent.host
@@ -2300,17 +2320,78 @@ private struct BouncerNetworksPopover: View {
 		}
 	}
 
-	private func add(_ network: BouncerNetwork) {
-		appState.addBouncerNetwork(network, on: parent)
-		dismiss()
-	}
-
-	private func stateColor(_ state: BouncerNetwork.State) -> Color {
-		switch state {
+	private var stateColor: Color {
+		switch network.state {
 		case .connected: .green
 		case .connecting: .orange
 		case .disconnected: .gray
 		case .unknown: .secondary
 		}
+	}
+}
+
+/// One-time onboarding banner shown above the server console when the
+/// user is connected to a soju-style bouncer they haven't done anything
+/// with yet. Surfaces the otherwise-easy-to-miss `BOUNCER LISTNETWORKS`
+/// discovery — without this, users only find the per-network "Add as
+/// server" flow via the 9-pt chip next to the server name in the sidebar.
+///
+/// Visible when **all** of the following hold:
+/// 1. The bouncer has advertised at least one upstream network.
+/// 2. The user hasn't pressed "Dismiss" on this server.
+/// 3. No sibling Server entry has `bouncerNetID` matching one of these
+///    networks — once the user has added even one, they've discovered
+///    the feature and the banner self-hides.
+@MainActor
+private struct BouncerOnboardingBanner: View {
+	let server: Server
+	@Environment(AppState.self) private var appState
+	@AppStorage private var dismissed: Bool
+
+	init(server: Server) {
+		self.server = server
+		_dismissed = AppStorage(
+			wrappedValue: false,
+			"\(PreferencesKeys.bouncerOnboardingDismissedPrefix)\(server.id)",
+		)
+	}
+
+	var body: some View {
+		if shouldShow {
+			VStack(alignment: .leading, spacing: 8) {
+				HStack(alignment: .firstTextBaseline, spacing: 8) {
+					Image(systemName: "point.3.connected.trianglepath.dotted")
+						.foregroundStyle(.tint)
+					VStack(alignment: .leading, spacing: 2) {
+						Text("This server is a soju bouncer.")
+							.font(.system(.body, weight: .semibold))
+						Text("\(server.bouncerNetworks.count) network\(server.bouncerNetworks.count == 1 ? "" : "s") available — add the ones you want to chat on.")
+							.font(.caption)
+							.foregroundStyle(.secondary)
+					}
+					Spacer()
+					Button("Dismiss") { dismissed = true }
+						.controlSize(.small)
+				}
+				ForEach(server.bouncerNetworks) { network in
+					BouncerNetworkRow(parent: server, network: network)
+				}
+			}
+			.padding(12)
+			.background(.regularMaterial)
+		}
+	}
+
+	private var shouldShow: Bool {
+		guard !dismissed, !server.bouncerNetworks.isEmpty else { return false }
+		// Once the user has added any of the advertised networks, treat
+		// the feature as discovered and hide the banner.
+		let advertisedIDs = Set(server.bouncerNetworks.map(\.id))
+		let alreadyAddedAny = appState.servers.contains { other in
+			other.id != server.id
+				&& other.host == server.host
+				&& (other.bouncerNetID.map(advertisedIDs.contains) ?? false)
+		}
+		return !alreadyAddedAny
 	}
 }
