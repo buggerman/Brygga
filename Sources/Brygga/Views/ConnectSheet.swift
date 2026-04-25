@@ -23,11 +23,16 @@ struct ConnectSheet: View {
 	/// any other value matches a `KnownNetwork.id`.
 	@State private var selectedNetworkID: String = "Libera.Chat"
 
-	/// Picks the default nickname from preferences, falling back to the macOS
-	/// user short name when the pref is blank.
+	/// Picks the default nickname from preferences, falling back to a
+	/// brand-derived placeholder with a random 4-digit suffix when the
+	/// pref is blank. We deliberately do **not** fall back to `NSUserName()`
+	/// — that's the macOS short name and would publish the user's local
+	/// identity to whichever IRC network they connect to. The placeholder
+	/// is meant to be typed-over; users who want a stable nick set one
+	/// in Preferences → Identity.
 	private static func initialNickname() -> String {
 		let stored = UserDefaults.standard.string(forKey: PreferencesKeys.defaultNickname) ?? ""
-		return stored.isEmpty ? NSUserName() : stored
+		return stored.isEmpty ? "brygga\(Int.random(in: 1000 ... 9999))" : stored
 	}
 
 	private var port: UInt16? {
