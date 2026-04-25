@@ -51,4 +51,10 @@ public enum PreferencesKeys {
 	/// `IRCSession.part(_:reason:)` use this constant so they stay in sync.
 	public static let defaultLeaveMessageFallback =
 		"Brygga (https://github.com/buggerman/Brygga) - A modern, fast, feature-rich IRC client for macOS"
+
+	/// Per-server dismissal flag for the soju-bouncer onboarding banner.
+	/// The full key is built as `"\(bouncerOnboardingDismissedPrefix)\(server.id)"`
+	/// and stores a `Bool`. Once set, the banner stays hidden across launches
+	/// for that server even if the bouncer keeps advertising new networks.
+	public static let bouncerOnboardingDismissedPrefix = "brygga.bouncerOnboarding.dismissed."
 }
