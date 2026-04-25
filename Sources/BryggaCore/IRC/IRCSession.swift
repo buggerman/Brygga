@@ -867,6 +867,11 @@ public final class IRCSession {
 	/// will additionally push BOUNCER NETWORK lines on changes —
 	/// `handleBouncer` updates `server.bouncerNetworks` in either case.
 	private func requestBouncerNetworksIfNeeded() {
+		// BIND'd connections are scoped to a single upstream network;
+		// they don't need (and shouldn't poll for) the full network
+		// list. The discovery / control Server (no bouncerNetID)
+		// is the canonical source of network state.
+		guard server.bouncerNetID == nil else { return }
 		let conn = connection
 		Task { [weak self] in
 			let caps = await conn.enabledCaps

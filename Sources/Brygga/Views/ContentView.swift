@@ -174,6 +174,8 @@ struct SidebarView: View {
 
 struct ServerRow: View {
 	@Bindable var server: Server
+	@Environment(AppState.self) private var appState
+	@State private var showingNetworksPopover = false
 
 	var body: some View {
 		HStack(spacing: 6) {
@@ -199,14 +201,21 @@ struct ServerRow: View {
 					.foregroundStyle(.secondary)
 			}
 			if !server.bouncerNetworks.isEmpty {
-				HStack(spacing: 2) {
-					Image(systemName: "point.3.connected.trianglepath.dotted")
-						.font(.system(size: 9))
-					Text("\(server.bouncerNetworks.count)")
-						.font(.caption)
+				Button { showingNetworksPopover = true } label: {
+					HStack(spacing: 2) {
+						Image(systemName: "point.3.connected.trianglepath.dotted")
+							.font(.system(size: 9))
+						Text("\(server.bouncerNetworks.count)")
+							.font(.caption)
+					}
+					.foregroundStyle(.secondary)
 				}
-				.foregroundStyle(.secondary)
-				.help("\(server.bouncerNetworks.count) networks via this bouncer")
+				.buttonStyle(.plain)
+				.popover(isPresented: $showingNetworksPopover, arrowEdge: .trailing) {
+					BouncerNetworksPopover(parent: server)
+						.environment(appState)
+				}
+				.help("\(server.bouncerNetworks.count) networks via this bouncer — click to add as servers")
 			}
 			Spacer(minLength: 0)
 		}
@@ -2142,5 +2151,85 @@ struct DetachedChannelView: View {
 			Task { try? await session.sendMessage(to: channel.name, content: outgoing) }
 		}
 		draft = ""
+	}
+}
+
+// MARK: - Bouncer networks popover
+
+/// Popover surfaced from `ServerRow`'s network-count badge. Lists the
+/// bouncer's upstream networks and offers an "Add as server" action
+/// per row. Clicking creates a sibling Server entry with `bouncerNetID`
+/// set so its `IRCConnection` runs `BOUNCER BIND <netid>` during
+/// registration and the user can chat on that single network.
+@MainActor
+private struct BouncerNetworksPopover: View {
+	let parent: Server
+	@Environment(AppState.self) private var appState
+	@Environment(\.dismiss) private var dismiss
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			Text("Networks via \(parent.name)")
+				.font(.headline)
+			if parent.bouncerNetworks.isEmpty {
+				Text("No networks discovered yet.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			} else {
+				ForEach(parent.bouncerNetworks) { network in
+					networkRow(network)
+				}
+			}
+		}
+		.padding(12)
+		.frame(minWidth: 280, idealWidth: 320)
+	}
+
+	private func networkRow(_ network: BouncerNetwork) -> some View {
+		HStack(spacing: 8) {
+			Circle()
+				.fill(stateColor(network.state))
+				.frame(width: 8, height: 8)
+			VStack(alignment: .leading, spacing: 1) {
+				Text(network.name ?? network.host ?? network.id)
+					.font(.system(.body, weight: .medium))
+				if let host = network.host, network.name != nil {
+					Text(host)
+						.font(.caption)
+						.foregroundStyle(.secondary)
+				}
+			}
+			Spacer(minLength: 8)
+			if alreadyAdded(network) {
+				Text("Added")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			} else {
+				Button("Add as server") { add(network) }
+					.controlSize(.small)
+			}
+		}
+	}
+
+	private func alreadyAdded(_ network: BouncerNetwork) -> Bool {
+		appState.servers.contains { other in
+			other.id != parent.id
+				&& other.host == parent.host
+				&& other.bouncerNetID == network.id
+		}
+	}
+
+	private func add(_ network: BouncerNetwork) {
+		appState.addBouncerNetwork(network, on: parent)
+		dismiss()
+	}
+
+	private func stateColor(_ state: BouncerNetwork.State) -> Color {
+		switch state {
+		case .connected: .green
+		case .connecting: .orange
+		case .disconnected: .gray
+		case .unknown: .secondary
+		}
 	}
 }

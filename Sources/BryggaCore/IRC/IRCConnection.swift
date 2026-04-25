@@ -24,6 +24,12 @@ public actor IRCConnection {
 	/// `nil` disables client-cert presentation and EXTERNAL.
 	public nonisolated let clientCertificatePath: String?
 	public nonisolated let clientCertificatePassphrase: String?
+	/// soju netid this connection is locked to via `BOUNCER BIND`.
+	/// When set and the `soju.im/bouncer-networks` cap is negotiated,
+	/// `BOUNCER BIND <netid>` is sent during registration before
+	/// `CAP END`. `nil` for non-bouncer connections and for the
+	/// unbound discovery / control connection of a bouncer.
+	public nonisolated let bouncerNetID: String?
 
 	// MARK: - State
 
@@ -72,6 +78,7 @@ public actor IRCConnection {
 		saslPassword: String? = nil,
 		clientCertificatePath: String? = nil,
 		clientCertificatePassphrase: String? = nil,
+		bouncerNetID: String? = nil,
 	) {
 		self.host = host
 		self.port = port
@@ -83,6 +90,7 @@ public actor IRCConnection {
 		self.saslPassword = saslPassword
 		self.clientCertificatePath = clientCertificatePath
 		self.clientCertificatePassphrase = clientCertificatePassphrase
+		self.bouncerNetID = bouncerNetID
 
 		var msgContinuation: AsyncStream<IRCLineParserResult>.Continuation!
 		messages = AsyncStream { continuation in
@@ -621,7 +629,20 @@ public actor IRCConnection {
 	private func finishCapNegotiation() {
 		guard capNegotiationActive else { return }
 		capNegotiationActive = false
-		Task { [weak self] in try? await self?.send("CAP END") }
+		// soju spec: BOUNCER BIND must be sent before registration
+		// completes (i.e. before CAP END). Only fire when the cap was
+		// actually negotiated — bouncerNetID can survive on a Server
+		// whose underlying bouncer isn't currently advertising the cap
+		// (e.g. soju upgrade pending), and BIND on a non-bouncer would
+		// be an error.
+		let bind = bouncerNetID
+		let capsHave = enabledCaps.contains("soju.im/bouncer-networks")
+		Task { [weak self] in
+			if let bind, !bind.isEmpty, capsHave {
+				try? await self?.send("BOUNCER BIND \(bind)")
+			}
+			try? await self?.send("CAP END")
+		}
 	}
 
 	// MARK: - Errors
