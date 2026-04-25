@@ -462,6 +462,7 @@ public final class IRCSession {
 			notifyOnline = []
 			chathistoryRequested = []
 			pendingChathistoryBackfill.removeAll()
+			pendingChathistoryAfter.removeAll()
 			activeChathistoryBatches.removeAll()
 			pendingChathistoryLimits.removeAll()
 			startNotifyPolling()
@@ -597,6 +598,10 @@ public final class IRCSession {
 						onHighlight?(channel, msg)
 					}
 				}
+				if let id = msg.msgid {
+					server.lastSeenMsgIDs[channel.name.lowercased()] = id
+					onChannelsChanged?()
+				}
 			}
 		} else {
 			// PM / query — use sender as the query name.
@@ -617,6 +622,10 @@ public final class IRCSession {
 			// PMs are inherently "for you" — always a highlight.
 			channel.highlightCount += 1
 			onHighlight?(channel, msg)
+			if let id = msg.msgid {
+				server.lastSeenMsgIDs[channel.name.lowercased()] = id
+				onChannelsChanged?()
+			}
 		}
 	}
 
@@ -640,6 +649,14 @@ public final class IRCSession {
 	/// stays on the live append path so the existing UX is unaffected).
 	private var pendingChathistoryBackfill: Set<String> = []
 
+	/// Lowercased channel names where we've fired a `CHATHISTORY
+	/// AFTER msgid=<lastSeen>` on JOIN and are waiting for the
+	/// matching batch. Messages arriving in this batch are diverted
+	/// from the live append path — they're historic gap-fill, not
+	/// live traffic, so they don't bump unread counts or fire
+	/// notifications.
+	private var pendingChathistoryAfter: Set<String> = []
+
 	/// Number of rows we asked for, keyed by lowercased channel name.
 	/// Used at BATCH end to decide whether the result was definitively
 	/// the head of the channel's history (got fewer rows than asked
@@ -648,19 +665,44 @@ public final class IRCSession {
 
 	private struct ChathistoryBatch {
 		let target: String
+		let direction: Direction
 		var buffer: [Message] = []
+
+		enum Direction {
+			/// Lazy scroll-up backfill via `CHATHISTORY BEFORE`. Buffer
+			/// is prepended to `channel.messages` on finalize.
+			case before
+			/// Cold-start gap fill via `CHATHISTORY AFTER msgid=<id>`.
+			/// Buffer is merged into `channel.messages` in chronological
+			/// order; `server.lastSeenMsgIDs` advances to the newest
+			/// msgid in the batch.
+			case after
+		}
 	}
 
 	private func requestChathistoryIfNeeded(for channel: Channel) {
 		let name = channel.name
 		let key = name.lowercased()
 		guard !chathistoryRequested.contains(key) else { return }
+		let lastSeen = server.lastSeenMsgIDs[key]
 		let conn = connection
 		Task { [weak self] in
 			let caps = await conn.enabledCaps
 			guard caps.contains("chathistory") || caps.contains("draft/chathistory") else { return }
 			self?.chathistoryRequested.insert(key)
-			try? await conn.send("CHATHISTORY LATEST \(name) * 100")
+			// When we know the most-recent msgid we observed last
+			// session, fire AFTER to fetch only the gap. Otherwise
+			// fall back to the cold-start LATEST 100. AFTER batches
+			// get diverted via `pendingChathistoryAfter` so historic
+			// messages don't bump unread/highlight counts; LATEST
+			// stays on the live append path so the existing
+			// notification heuristics keep working.
+			if let lastSeen, !lastSeen.isEmpty {
+				self?.pendingChathistoryAfter.insert(key)
+				try? await conn.send("CHATHISTORY AFTER \(name) msgid=\(lastSeen) 100")
+			} else {
+				try? await conn.send("CHATHISTORY LATEST \(name) * 100")
+			}
 		}
 	}
 
@@ -715,11 +757,24 @@ public final class IRCSession {
 			guard type == "chathistory" || type == "draft/chathistory" else { return }
 			let target = message.params[2]
 			let key = target.lowercased()
-			// Only intercept if the user explicitly asked for backfill.
-			// The cold-start LATEST 100 batch isn't flagged here, so its
-			// messages flow through the normal handlePrivmsg → record path.
-			guard pendingChathistoryBackfill.remove(key) != nil else { return }
-			activeChathistoryBatches[ref] = ChathistoryBatch(target: target)
+			// Distinguish the three chathistory cases:
+			// 1. BEFORE backfill (lazy scroll-up) → divert + prepend
+			// 2. AFTER cold-start gap fill → divert + chronological merge
+			// 3. LATEST cold-start (no anchor) → don't divert; messages
+			//    flow through the live append path so existing UX
+			//    preserves notifications + unread counts as today.
+			let direction: ChathistoryBatch.Direction
+			if pendingChathistoryBackfill.remove(key) != nil {
+				direction = .before
+			} else if pendingChathistoryAfter.remove(key) != nil {
+				direction = .after
+			} else {
+				return
+			}
+			activeChathistoryBatches[ref] = ChathistoryBatch(
+				target: target,
+				direction: direction,
+			)
 		} else if first.hasPrefix("-") {
 			let ref = String(first.dropFirst())
 			guard let ctx = activeChathistoryBatches.removeValue(forKey: ref) else { return }
@@ -745,9 +800,29 @@ public final class IRCSession {
 		}
 
 		if !novel.isEmpty {
-			channel.messages.insert(contentsOf: novel, at: 0)
-			if let oldest = novel.compactMap(\.msgid).first {
-				channel.oldestKnownMsgID = oldest
+			switch ctx.direction {
+			case .before:
+				channel.messages.insert(contentsOf: novel, at: 0)
+				if let oldest = novel.compactMap(\.msgid).first {
+					channel.oldestKnownMsgID = oldest
+				}
+			case .after:
+				// AFTER messages may interleave with live messages that
+				// arrived during the JOIN handshake; merge in
+				// chronological order via per-message insertion. Cheap
+				// at the 500-row scrollback cap.
+				for msg in novel {
+					let idx = channel.messages.firstIndex {
+						$0.timestamp > msg.timestamp
+					} ?? channel.messages.endIndex
+					channel.messages.insert(msg, at: idx)
+				}
+				// Advance lastSeen to the newest msgid we just absorbed
+				// so the next reconnect anchors past it.
+				if let newest = novel.compactMap(\.msgid).last {
+					server.lastSeenMsgIDs[key] = newest
+					onChannelsChanged?()
+				}
 			}
 			let sid = server.id
 			let target = ctx.target
@@ -762,9 +837,14 @@ public final class IRCSession {
 			}
 		}
 
-		// Server returned fewer rows than asked → that's the head of the
-		// channel's history; stop firing further backfill requests.
-		if let lim = requestedLimit, received.count < lim {
+		// Server returned fewer rows than asked → that's the head of
+		// the channel's history; stop firing further BEFORE-direction
+		// backfill requests. (Doesn't apply to AFTER — that's about
+		// how much we missed since reconnect, not channel-head.)
+		if ctx.direction == .before,
+		   let lim = requestedLimit,
+		   received.count < lim
+		{
 			channel.hasMoreHistoryAbove = false
 		}
 	}
@@ -1298,6 +1378,10 @@ public final class IRCSession {
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
 				record(msg, in: channel)
+				if let id = msg.msgid {
+					server.lastSeenMsgIDs[channel.name.lowercased()] = id
+					onChannelsChanged?()
+				}
 			}
 		} else {
 			// Server / user-directed notice — show in the server console.

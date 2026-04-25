@@ -172,6 +172,7 @@ public final class AppState {
 				clientCertificatePassphrase: certPassphrase,
 			)
 			server.presenceCollapseOverrides = config.channelPresenceCollapse ?? [:]
+			server.lastSeenMsgIDs = config.channelLastSeenMsgID ?? [:]
 			// Pre-create Channel objects for auto-join channels so the async
 			// scrollback rehydrate below has somewhere to land. Without this,
 			// the channel doesn't exist until the server responds to our
@@ -252,6 +253,8 @@ public final class AppState {
 				clientCertificatePassphrase: nil,
 				channelPresenceCollapse: server.presenceCollapseOverrides.isEmpty
 					? nil : server.presenceCollapseOverrides,
+				channelLastSeenMsgID: server.lastSeenMsgIDs.isEmpty
+					? nil : server.lastSeenMsgIDs,
 			)
 		}
 		return ServerStore.Snapshot(servers: configs)

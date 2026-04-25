@@ -34,6 +34,14 @@ public final class Server: Identifiable {
 	/// global `PreferencesKeys.collapsePresenceRuns` default; absence means
 	/// "inherit". Persisted via `ServerConfig.channelPresenceCollapse`.
 	public var presenceCollapseOverrides: [String: Bool] = [:]
+	/// Server-assigned IRCv3 `msgid` of the most recent message Brygga
+	/// has observed in each channel, keyed by lowercased channel name.
+	/// On reconnect / cold start, used as the anchor for `CHATHISTORY
+	/// AFTER msgid=<id>` so the server replays exactly what we missed
+	/// while disconnected — closing the gap the JOIN-time `LATEST 100`
+	/// heuristic leaves. Persisted via
+	/// `ServerConfig.channelLastSeenMsgID`.
+	public var lastSeenMsgIDs: [String: String] = [:]
 	public var isAway: Bool = false
 	public var awayMessage: String?
 	public var state: ConnectionState = .disconnected
