@@ -944,9 +944,11 @@ struct MessageList: View {
 
 	var body: some View {
 		VStack(spacing: 0) {
-			if channel.isLoadingHistory {
-				HistoryLoadingBanner()
-			}
+			HistoryHeaderView(
+				channel: channel,
+				supportsChathistory: serverSupportsChathistory,
+				loadMore: { appState.requestMoreHistory(for: channel) },
+			)
 			MessageBufferView(
 				messages: visibleMessages,
 				lastReadMessageID: effectiveLastReadID,
@@ -957,6 +959,64 @@ struct MessageList: View {
 				collapsePresenceRuns: effectiveCollapse,
 				onScrollNearTop: { appState.requestMoreHistory(for: channel) },
 			)
+		}
+	}
+
+	private var serverSupportsChathistory: Bool {
+		appState.servers
+			.first { $0.channels.contains { $0.id == channel.id } }?
+			.supportsChathistory ?? false
+	}
+}
+
+/// Top-of-buffer affordance for CHATHISTORY. Renders one of four states:
+///
+/// 1. `isLoadingHistory` — animated "Loading older messages…" banner.
+/// 2. supported + `hasMoreHistoryAbove` — clickable "Load earlier messages"
+///    row so users can pull history without scrolling-to-the-top
+///    (which is otherwise the only trigger).
+/// 3. supported + head reached — quiet "Beginning of history" terminator
+///    so users *know* they've seen everything the server has.
+/// 4. unsupported — render nothing. Showing a button on a server with no
+///    replay would mislead.
+///
+/// State 1 visually preserves the previous `HistoryLoadingBanner` so the
+/// in-flight UX is unchanged.
+private struct HistoryHeaderView: View {
+	let channel: Channel
+	let supportsChathistory: Bool
+	let loadMore: () -> Void
+
+	var body: some View {
+		if channel.isLoadingHistory {
+			HistoryLoadingBanner()
+		} else if supportsChathistory, channel.hasMoreHistoryAbove {
+			Button(action: loadMore) {
+				HStack(spacing: 8) {
+					Image(systemName: "arrow.up.circle")
+						.font(.caption)
+					Text("Load earlier messages")
+						.font(.caption)
+					Spacer()
+				}
+				.padding(.horizontal, 12)
+				.padding(.vertical, 6)
+				.contentShape(Rectangle())
+			}
+			.buttonStyle(.plain)
+			.foregroundStyle(.secondary)
+			.background(.regularMaterial)
+			.help("Fetch older messages from the server (CHATHISTORY)")
+		} else if supportsChathistory {
+			HStack(spacing: 8) {
+				Spacer()
+				Text("\u{2014} Beginning of history \u{2014}")
+					.font(.caption)
+					.foregroundStyle(.tertiary)
+				Spacer()
+			}
+			.padding(.horizontal, 12)
+			.padding(.vertical, 6)
 		}
 	}
 }

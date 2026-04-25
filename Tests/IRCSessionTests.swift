@@ -42,6 +42,26 @@ final class IRCSessionTests: XCTestCase {
 		XCTAssertEqual(channel.messages.last?.kind, .join)
 	}
 
+	// MARK: - chathistory
+
+	func testServerDefaultsToChathistoryUnsupported() {
+		let session = makeSession()
+		XCTAssertFalse(session.server.supportsChathistory)
+	}
+
+	func testRequestMoreHistoryNoOpAtHeadOfHistory() {
+		let session = makeSession()
+		session.handle(parse(":me!~me@host JOIN #test"))
+		let channel = session.server.channels[0]
+		channel.hasMoreHistoryAbove = false
+
+		session.requestMoreHistory(for: channel)
+
+		// Head-of-history early-return must not flip the loading flag,
+		// otherwise the UI would render a spinner that never resolves.
+		XCTAssertFalse(channel.isLoadingHistory)
+	}
+
 	// MARK: - PART
 
 	func testOwnPartMarksChannelLeft() {
