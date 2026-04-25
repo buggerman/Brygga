@@ -31,6 +31,20 @@ public final class Channel: Identifiable {
 	/// so we don't double-load when JOIN is received for a channel the
 	/// restore path already rehydrated. Transient.
 	public var scrollbackLoaded: Bool = false
+	/// Whether the server (or bouncer) likely has more chathistory
+	/// above the oldest message we currently hold locally. Set to
+	/// `false` when a `CHATHISTORY BEFORE` request returns fewer rows
+	/// than asked for, so the lazy-backfill code knows to stop firing.
+	/// Transient — re-evaluated each session.
+	public var hasMoreHistoryAbove: Bool = true
+	/// `true` while a lazy `CHATHISTORY BEFORE` request is in flight.
+	/// Drives the "Loading older messages…" banner. Transient.
+	public var isLoadingHistory: Bool = false
+	/// IRCv3 `msgid` of the oldest message held in `messages` for which
+	/// the server might have more history above. Set when chathistory
+	/// arrives so the next `BEFORE` request anchors against it.
+	/// Transient.
+	public var oldestKnownMsgID: String?
 
 	public init(name: String) {
 		id = UUID().uuidString
@@ -75,6 +89,12 @@ public struct Message: Identifiable, Sendable, Codable {
 	public let content: String
 	public let kind: Kind
 	public var isHighlight: Bool
+	/// Server-assigned IRCv3 `msgid` tag, when the server provided
+	/// one. Anchors `CHATHISTORY BEFORE`/`AFTER` queries and lets us
+	/// dedup overlap between local scrollback and bouncer replays.
+	/// `nil` for messages predating the IRCv3 `message-tags` cap or
+	/// servers that don't set the tag.
+	public let msgid: String?
 
 	public init(
 		timestamp: Date = Date(),
@@ -82,6 +102,7 @@ public struct Message: Identifiable, Sendable, Codable {
 		content: String,
 		kind: Kind,
 		isHighlight: Bool = false,
+		msgid: String? = nil,
 	) {
 		id = UUID()
 		self.timestamp = timestamp
@@ -89,10 +110,11 @@ public struct Message: Identifiable, Sendable, Codable {
 		self.content = content
 		self.kind = kind
 		self.isHighlight = isHighlight
+		self.msgid = msgid
 	}
 
 	private enum CodingKeys: String, CodingKey {
-		case id, timestamp, sender, content, kind, isHighlight
+		case id, timestamp, sender, content, kind, isHighlight, msgid
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -103,6 +125,7 @@ public struct Message: Identifiable, Sendable, Codable {
 		content = try c.decode(String.self, forKey: .content)
 		kind = try c.decode(Kind.self, forKey: .kind)
 		isHighlight = try c.decodeIfPresent(Bool.self, forKey: .isHighlight) ?? false
+		msgid = try c.decodeIfPresent(String.self, forKey: .msgid)
 	}
 
 	public enum Kind: String, Sendable, Codable {

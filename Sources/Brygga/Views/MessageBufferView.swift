@@ -24,6 +24,12 @@ struct MessageBufferView: NSViewRepresentable {
 	let linkPreviewsEnabled: Bool
 	let linkPreviews: LinkPreviewStore?
 	let collapsePresenceRuns: Bool
+	/// Fired when the user scrolls near the top of the buffer — the
+	/// signal `MessageList` uses to lazily fetch older history via
+	/// `CHATHISTORY BEFORE`. Throttled inside the Coordinator so a
+	/// single drag doesn't fire a flurry of requests. Optional so
+	/// `ServerMessageList` (which has no chathistory concept) can omit it.
+	var onScrollNearTop: (() -> Void)?
 
 	func makeCoordinator() -> Coordinator {
 		Coordinator()
@@ -72,10 +78,16 @@ struct MessageBufferView: NSViewRepresentable {
 
 		context.coordinator.textView = textView
 		context.coordinator.scrollView = scroll
+		context.coordinator.attachScrollObserver()
 		return scroll
 	}
 
+	static func dismantleNSView(_: NSScrollView, coordinator: Coordinator) {
+		coordinator.detachScrollObserver()
+	}
+
 	func updateNSView(_: NSScrollView, context: Context) {
+		context.coordinator.onScrollNearTop = onScrollNearTop
 		context.coordinator.apply(
 			messages: messages,
 			lastReadMessageID: lastReadMessageID,
@@ -105,6 +117,22 @@ struct MessageBufferView: NSViewRepresentable {
 		/// `foldPresenceRuns`), so this set survives appends that merely
 		/// extend an existing run.
 		private var expandedRunIDs: Set<UUID> = []
+
+		/// SwiftUI side passes this through `updateNSView` so the
+		/// scroll-bounds handler can fire it. `nil` for views that
+		/// don't want lazy backfill (e.g. `ServerMessageList`).
+		var onScrollNearTop: (() -> Void)?
+		/// Block-based observer token for `NSView.boundsDidChangeNotification`
+		/// on the scrollView's contentView. Block-based registration
+		/// keeps the observer in pure Swift — no `@objc` selector
+		/// callback needed.
+		private var scrollObserver: NSObjectProtocol?
+		/// Throttle the lazy-backfill firing so a single drag past the
+		/// top doesn't kick off back-to-back requests while a previous
+		/// one is still in flight or has just resolved.
+		private var lastBackfillFireAt: Date?
+		private static let topThreshold: CGFloat = 80
+		private static let backfillCooldown: TimeInterval = 1.5
 
 		/// Cached decoded image bytes, keyed by the `imageURL` of the
 		/// preview they illustrate. Images fetched once per Coordinator
@@ -668,6 +696,58 @@ struct MessageBufferView: NSViewRepresentable {
 			let y = max(0, docHeight - visibleHeight)
 			scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
 			scrollView.reflectScrolledClipView(scrollView.contentView)
+		}
+
+		/// Register a block-based notification observer for
+		/// `NSView.boundsDidChangeNotification` on the scrollView's
+		/// contentView. Block-based registration is the modern
+		/// Foundation API and keeps this purely in Swift — there's
+		/// no `@objc` selector or `NSObjectProtocol` subclass needed.
+		/// Idempotent: re-attaching first removes the previous token.
+		func attachScrollObserver() {
+			guard let scrollView else { return }
+			if let token = scrollObserver {
+				NotificationCenter.default.removeObserver(token)
+			}
+			// Block-based observer; we asked for `queue: .main`, so the
+			// closure runs on the main thread. Hop through a Task with
+			// `@MainActor` to satisfy Swift 6 strict-concurrency's view of
+			// isolation without taking a synchronous-trap risk.
+			scrollObserver = NotificationCenter.default.addObserver(
+				forName: NSView.boundsDidChangeNotification,
+				object: scrollView.contentView,
+				queue: .main,
+			) { [weak self] _ in
+				Task { @MainActor [weak self] in
+					self?.handleScrollBoundsChanged()
+				}
+			}
+		}
+
+		/// Tear-down counterpart to `attachScrollObserver`. Called from
+		/// `MessageBufferView.dismantleNSView(_:coordinator:)` so cleanup
+		/// runs on the main actor — `deinit` can't reach the
+		/// non-Sendable observer token under Swift 6.2 strict
+		/// concurrency.
+		func detachScrollObserver() {
+			if let token = scrollObserver {
+				NotificationCenter.default.removeObserver(token)
+				scrollObserver = nil
+			}
+		}
+
+		private func handleScrollBoundsChanged() {
+			guard let onScrollNearTop, let scrollView else { return }
+			let visible = scrollView.contentView.documentVisibleRect
+			guard visible.minY < Self.topThreshold else { return }
+			let now = Date.now
+			if let last = lastBackfillFireAt,
+			   now.timeIntervalSince(last) < Self.backfillCooldown
+			{
+				return
+			}
+			lastBackfillFireAt = now
+			onScrollNearTop()
 		}
 
 		// MARK: - NSTextViewDelegate

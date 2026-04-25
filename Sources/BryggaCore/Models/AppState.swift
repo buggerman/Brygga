@@ -262,6 +262,17 @@ public final class AppState {
 		ServerStore.save(snapshot())
 	}
 
+	/// Convenience hand-off for the lazy "load older messages" affordance:
+	/// finds the server that owns `channel`, then asks its session to
+	/// fire a `CHATHISTORY BEFORE` request. No-op when the owning
+	/// server has no active session (e.g. disconnected).
+	public func requestMoreHistory(for channel: Channel) {
+		guard let server = servers.first(where: { $0.channels.contains { $0.id == channel.id } }),
+		      let session = sessions[server.id]
+		else { return }
+		session.requestMoreHistory(for: channel)
+	}
+
 	/// Resolve the effective "collapse presence runs" value for `channel`,
 	/// preferring the per-channel override on the owning server if one is
 	/// set, otherwise returning `globalDefault`.

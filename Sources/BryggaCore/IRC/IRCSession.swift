@@ -303,7 +303,7 @@ public final class IRCSession {
 		case "CHGHOST": handleChghost(message)
 		case "ACCOUNT": handleAccount(message)
 		case "AWAY": handleAway(message)
-		case "BATCH": break // IRCv3 batches — ignored for now, messages flow through normally
+		case "BATCH": handleBatch(message)
 		case "CAP": break // CAP traffic is handled in IRCConnection; suppress server-log noise here
 		default:
 			// Surface unhandled protocol traffic in the server console so users
@@ -461,6 +461,9 @@ public final class IRCSession {
 			}
 			notifyOnline = []
 			chathistoryRequested = []
+			pendingChathistoryBackfill.removeAll()
+			activeChathistoryBatches.removeAll()
+			pendingChathistoryLimits.removeAll()
 			startNotifyPolling()
 			for line in server.performCommands {
 				Task { try? await connection.send(line) }
@@ -566,7 +569,20 @@ public final class IRCSession {
 			content: content,
 			kind: kind,
 			isHighlight: isHighlight,
+			msgid: message.tags["msgid"],
 		)
+
+		// If this PRIVMSG belongs to a chathistory backfill batch we
+		// initiated, divert it into the batch buffer instead of the live
+		// append path. The buffer is flushed (with prepend semantics)
+		// when the BATCH end line arrives.
+		if let batchRef = message.tags["batch"],
+		   var ctx = activeChathistoryBatches[batchRef]
+		{
+			ctx.buffer.append(msg)
+			activeChathistoryBatches[batchRef] = ctx
+			return
+		}
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
 			if let channel = server.channels.first(where: { $0.name == target }) {
@@ -610,6 +626,31 @@ public final class IRCSession {
 	/// this session. Cleared on each 001 welcome so reconnects re-request.
 	private var chathistoryRequested: Set<String> = []
 
+	/// Buffers for in-flight chathistory backfill batches, keyed by the
+	/// server-assigned BATCH reference. Filled from `handlePrivmsg`
+	/// when an incoming PRIVMSG carries a `batch` tag matching one of
+	/// these refs; flushed (with prepend semantics) when the matching
+	/// `BATCH -<ref>` end line arrives.
+	private var activeChathistoryBatches: [String: ChathistoryBatch] = [:]
+
+	/// Lowercased channel names where the user has triggered a lazy
+	/// "load older" request (`CHATHISTORY BEFORE`) and we are waiting
+	/// for the server to open the matching batch. Distinguishes our
+	/// backfill batches from the cold-start `LATEST 100` batch (which
+	/// stays on the live append path so the existing UX is unaffected).
+	private var pendingChathistoryBackfill: Set<String> = []
+
+	/// Number of rows we asked for, keyed by lowercased channel name.
+	/// Used at BATCH end to decide whether the result was definitively
+	/// the head of the channel's history (got fewer rows than asked
+	/// for → flip `hasMoreHistoryAbove` to `false`).
+	private var pendingChathistoryLimits: [String: Int] = [:]
+
+	private struct ChathistoryBatch {
+		let target: String
+		var buffer: [Message] = []
+	}
+
 	private func requestChathistoryIfNeeded(for channel: Channel) {
 		let name = channel.name
 		let key = name.lowercased()
@@ -621,6 +662,118 @@ public final class IRCSession {
 			self?.chathistoryRequested.insert(key)
 			try? await conn.send("CHATHISTORY LATEST \(name) * 100")
 		}
+	}
+
+	/// Public entry point for the lazy "load older messages" affordance.
+	/// Triggered by `MessageBufferView`'s scroll-near-top observer.
+	/// Idempotent under concurrent calls — the in-flight guard on
+	/// `Channel.isLoadingHistory` and the `pendingChathistoryBackfill`
+	/// set together prevent overlapping requests for the same channel.
+	public func requestMoreHistory(for channel: Channel) {
+		guard channel.hasMoreHistoryAbove, !channel.isLoadingHistory else { return }
+		let key = channel.name.lowercased()
+		let limit = 50
+		// Anchor BEFORE on the oldest known msgid when we have one, falling
+		// back to the oldest message's server-time when we only have a
+		// timestamp, falling back to `*` (server picks "right now") when
+		// the channel buffer is empty.
+		let anchor = if let id = channel.oldestKnownMsgID, !id.isEmpty {
+			"msgid=\(id)"
+		} else if let id = channel.messages.compactMap(\.msgid).first {
+			"msgid=\(id)"
+		} else if let oldest = channel.messages.first {
+			"timestamp=\(Self.ircTimestamp(oldest.timestamp))"
+		} else {
+			"*"
+		}
+		let target = channel.name
+		let conn = connection
+		channel.isLoadingHistory = true
+		pendingChathistoryBackfill.insert(key)
+		pendingChathistoryLimits[key] = limit
+		Task { [weak self, weak channel] in
+			let caps = await conn.enabledCaps
+			guard caps.contains("chathistory") || caps.contains("draft/chathistory") else {
+				await MainActor.run {
+					channel?.isLoadingHistory = false
+					self?.pendingChathistoryBackfill.remove(key)
+					self?.pendingChathistoryLimits.removeValue(forKey: key)
+				}
+				return
+			}
+			try? await conn.send("CHATHISTORY BEFORE \(target) \(anchor) \(limit)")
+		}
+	}
+
+	private func handleBatch(_ message: IRCLineParserResult) {
+		guard let first = message.params.first else { return }
+		if first.hasPrefix("+") {
+			// Start: BATCH +ref <type> [<params>...]
+			let ref = String(first.dropFirst())
+			guard message.params.count >= 3 else { return }
+			let type = message.params[1]
+			guard type == "chathistory" || type == "draft/chathistory" else { return }
+			let target = message.params[2]
+			let key = target.lowercased()
+			// Only intercept if the user explicitly asked for backfill.
+			// The cold-start LATEST 100 batch isn't flagged here, so its
+			// messages flow through the normal handlePrivmsg → record path.
+			guard pendingChathistoryBackfill.remove(key) != nil else { return }
+			activeChathistoryBatches[ref] = ChathistoryBatch(target: target)
+		} else if first.hasPrefix("-") {
+			let ref = String(first.dropFirst())
+			guard let ctx = activeChathistoryBatches.removeValue(forKey: ref) else { return }
+			finalizeChathistoryBatch(ctx)
+		}
+	}
+
+	private func finalizeChathistoryBatch(_ ctx: ChathistoryBatch) {
+		let key = ctx.target.lowercased()
+		let requestedLimit = pendingChathistoryLimits.removeValue(forKey: key)
+		guard let channel = server.channels.first(where: { $0.name.lowercased() == key }) else {
+			return
+		}
+		channel.isLoadingHistory = false
+
+		let received = ctx.buffer
+		// Dedup against existing in-channel messages by msgid so an
+		// overlap with what we already have doesn't double-show.
+		let existing = Set(channel.messages.compactMap(\.msgid))
+		let novel = received.filter { msg in
+			guard let m = msg.msgid else { return true }
+			return !existing.contains(m)
+		}
+
+		if !novel.isEmpty {
+			channel.messages.insert(contentsOf: novel, at: 0)
+			if let oldest = novel.compactMap(\.msgid).first {
+				channel.oldestKnownMsgID = oldest
+			}
+			let sid = server.id
+			let target = ctx.target
+			Task {
+				for msg in novel {
+					await ScrollbackStore.shared.append(
+						serverId: sid,
+						target: target,
+						message: msg,
+					)
+				}
+			}
+		}
+
+		// Server returned fewer rows than asked → that's the head of the
+		// channel's history; stop firing further backfill requests.
+		if let lim = requestedLimit, received.count < lim {
+			channel.hasMoreHistoryAbove = false
+		}
+	}
+
+	/// IRCv3 server-time format: `YYYY-MM-DDTHH:mm:ss.sssZ` (UTC).
+	private static func ircTimestamp(_ date: Date) -> String {
+		let formatter = ISO8601DateFormatter()
+		formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+		return formatter.string(from: date)
 	}
 
 	// MARK: - Perform (post-welcome commands)
@@ -1139,6 +1292,7 @@ public final class IRCSession {
 			sender: sender,
 			content: body,
 			kind: .notice,
+			msgid: message.tags["msgid"],
 		)
 
 		if target.hasPrefix("#") || target.hasPrefix("&") {
