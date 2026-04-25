@@ -192,6 +192,12 @@ public final class AppState {
 				server.channels.append(ch)
 			}
 			// Rehydrate scrollback for server console + every known channel.
+			// Each loaded message is also fed into the FTS5 index using the
+			// canonical channel name — this is the cold-start backfill path,
+			// done lazily through the existing rehydrate loop instead of a
+			// separate filesystem walker. `ScrollbackIndex.index` is
+			// idempotent on `msg_id`, so on-line writes that ran first
+			// won't be double-counted.
 			Task { [server] in
 				let serverMessages = await ScrollbackStore.shared.load(
 					serverId: server.id,
@@ -199,6 +205,9 @@ public final class AppState {
 				)
 				await MainActor.run {
 					server.messages.insert(contentsOf: serverMessages, at: 0)
+				}
+				for msg in serverMessages {
+					await ScrollbackIndex.shared.index(msg, serverID: server.id, target: "__server__")
 				}
 				for channel in server.channels {
 					let msgs = await ScrollbackStore.shared.load(
@@ -208,6 +217,13 @@ public final class AppState {
 					await MainActor.run {
 						channel.messages.insert(contentsOf: msgs, at: 0)
 						channel.scrollbackLoaded = true
+					}
+					for msg in msgs {
+						await ScrollbackIndex.shared.index(
+							msg,
+							serverID: server.id,
+							target: channel.name,
+						)
 					}
 				}
 			}
@@ -282,10 +298,13 @@ public final class AppState {
 		guard let channelIdx = server.channels.firstIndex(where: { $0.id == channelID }),
 		      server.channels[channelIdx].isPrivateMessage
 		else { return }
+		let closedTarget = server.channels[channelIdx].name
+		let serverID = server.id
 		server.channels.remove(at: channelIdx)
 		if selection == channelID {
 			selection = server.id
 		}
+		Task { await ScrollbackIndex.shared.clear(serverID: serverID, target: closedTarget) }
 		persist()
 	}
 
@@ -578,6 +597,7 @@ public final class AppState {
 		if selection == id {
 			selection = nil
 		}
+		Task { await ScrollbackIndex.shared.clear(serverID: id) }
 		persist()
 	}
 }
