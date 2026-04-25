@@ -466,6 +466,19 @@ public final class IRCSession {
 			pendingChathistoryAfter.removeAll()
 			activeChathistoryBatches.removeAll()
 			pendingChathistoryLimits.removeAll()
+			// Mirror chathistory CAP support onto the @Observable Server so
+			// SwiftUI can render the "Load earlier messages" affordance
+			// without awaiting the connection actor on every body eval.
+			// Cleared first so a reconnect to a server that no longer
+			// negotiates the cap doesn't show a stale yes.
+			server.supportsChathistory = false
+			let conn = connection
+			let mirrorTarget = server
+			Task { @MainActor in
+				let caps = await conn.enabledCaps
+				mirrorTarget.supportsChathistory = caps.contains("chathistory")
+					|| caps.contains("draft/chathistory")
+			}
 			startNotifyPolling()
 			for line in server.performCommands {
 				Task { try? await connection.send(line) }

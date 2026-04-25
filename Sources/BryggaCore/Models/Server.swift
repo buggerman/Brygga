@@ -69,6 +69,13 @@ public final class Server: Identifiable {
 	/// bouncer (the unbound connection that fronts LISTNETWORKS).
 	/// Persisted via `ServerConfig.bouncerNetID`.
 	public var bouncerNetID: String?
+	/// Whether the server (or fronting bouncer) negotiated the
+	/// `chathistory` / `draft/chathistory` cap during CAP negotiation.
+	/// Mirrored from `IRCConnection.enabledCaps` on welcome so SwiftUI
+	/// can render the "Load earlier messages" affordance synchronously
+	/// without awaiting the connection actor. Transient — recomputed
+	/// each session.
+	public var supportsChathistory: Bool = false
 
 	public init(
 		id: String? = nil,
