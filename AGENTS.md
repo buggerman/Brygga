@@ -46,7 +46,7 @@ Install SwiftFormat once with `brew install swiftformat`. Config lives in `.swif
 - **Chat buffer is AppKit-backed.** `MessageBufferView: NSViewRepresentable` wraps `NSScrollView` + non-editable `NSTextView`, because SwiftUI `.textSelection(.enabled)` only permits selection inside one `Text` — drag-selecting across rows is impossible in pure SwiftUI. The `Coordinator` owns per-view presentation state (`expandedRunIDs`, `images: [URL: NSImage]` cache, `lastApply` args); that state does **not** belong on the `@Observable` models because it's view-specific.
 - **Link previews** render inline as `NSTextAttachment` cells via the `LinkPreviewAttachmentCell: NSTextAttachmentCell` subclass inside `MessageBufferView.swift`. Metadata comes from `LinkPreviewStore`; image bytes are fetched once per Coordinator lifetime via `URLSession.ephemeral` (10 s timeout, 2 MB cap, http/https only).
 - **Presence-run collapse** uses `BryggaCore.foldPresenceRuns(_:) -> [ChatEntry]` to collapse consecutive JOIN / PART / QUIT / NICK into a single summary row, and `presenceRunSummary(_:) -> String` for the display text. The Coordinator tags runs with a `brygga-toggle-run://<uuid>` link and intercepts clicks in `textView(_:clickedOnLink:at:)` to toggle expansion. The append fast-path is disabled in collapse mode because a new message can reshape the tail run.
-- **Pure Swift.** Do not introduce Objective-C source files, bridging headers, or C interop. Keep `@objc` off any new *public* API. A private `@objc` selector callback required by an AppKit target-action contract (e.g. an `NSMenuItem` target) is the only acceptable exception — keep it private and scoped to the Coordinator.
+- **Pure Swift.** "C interop" here means adding *third-party* C source, bridging headers, or `.m` files — that's still off-limits. Importing system modules shipped in the macOS SDK (`Foundation`, `AppKit`, `Network`, `os.log`, `UserNotifications`, `SQLite3`, …) is permitted; they're in the OS and add no build-time dependency. When a system C API is used (e.g. `SQLite3` for FTS5-powered scrollback search), the unsafe pointer surface (`UnsafeMutablePointer<OpaquePointer?>`, `sqlite3_*` calls) must be wrapped in a small `actor` and not appear in any public API. Keep `@objc` off new *public* APIs; a private `@objc` selector callback required by an AppKit target-action contract (e.g. an `NSMenuItem` target) is the one acceptable exception — keep it private and scoped to the Coordinator.
 
 ## Persistence
 
@@ -168,7 +168,7 @@ Other on-disk state:
 
 - Do not create `.app` bundles by hand — use `Scripts/build-app.sh`.
 - Do not regenerate `AppIcon.icns` unless the source art changes.
-- Do not introduce Objective-C source, bridging headers, or C interop. `@objc` stays off new public APIs (private AppKit target-action selectors are the one exception — see architecture invariants).
+- Do not introduce Objective-C source, bridging headers, or third-party C libraries. `import` of system modules from the macOS SDK (`SQLite3`, `os.log`, etc.) is fine — see the **Pure Swift** invariant for the unsafe-surface wrapping rule. `@objc` stays off new public APIs (private AppKit target-action selectors are the one exception — see architecture invariants).
 - Do not add `@available` guards; bump the deployment floor instead.
 - Do not hammer Libera / OFTC / other public networks during dev loops.
 - Do not skip commit hooks (`--no-verify`).
