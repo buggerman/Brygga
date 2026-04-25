@@ -1903,7 +1903,14 @@ struct UserListView: View {
 				}
 				.listRowSeparator(.hidden)
 				.contentShape(Rectangle())
-				.onTapGesture(count: 2) { query(user.nickname) }
+				// `simultaneousGesture` instead of `onTapGesture` so the
+				// double-click recognizer doesn't compete with the native
+				// `List(selection:)` single-click. With `onTapGesture(count: 2)`
+				// SwiftUI defers the first tap waiting for a possible second,
+				// which makes single-click selection feel flaky.
+				.simultaneousGesture(
+					TapGesture(count: 2).onEnded { query(user.nickname) },
+				)
 				.contextMenu {
 					userRowMenu(for: user.nickname, channelName: channel.name)
 				}
