@@ -125,7 +125,18 @@ public final class IRCSession {
 	// MARK: - Commands
 
 	public func join(_ channel: String) async throws {
-		try await connection.send("JOIN \(channel)")
+		try await connection.send("JOIN \(Self.normalizedChannelName(channel))")
+	}
+
+	/// Returns `raw` with a `#` prefix added when it doesn't already begin
+	/// with one of the RFC 2811 channel-prefix characters (`# & + !`). Lets
+	/// users type `/join linux` and land in `#linux` — the common case —
+	/// while preserving explicit `&local`, `+modeless`, and `!safe` channels
+	/// when the prefix is present.
+	public static func normalizedChannelName(_ raw: String) -> String {
+		let trimmed = raw.trimmingCharacters(in: .whitespaces)
+		if let first = trimmed.first, "#&+!".contains(first) { return trimmed }
+		return "#\(trimmed)"
 	}
 
 	public func part(_ channel: String, reason: String? = nil) async throws {

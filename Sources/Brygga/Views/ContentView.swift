@@ -1849,8 +1849,9 @@ struct QuickJoinSheet: View {
 		let trimmed = channel.trimmingCharacters(in: .whitespaces)
 		guard !trimmed.isEmpty,
 		      let session = appState.sessions[serverID] else { return }
-		let name = trimmed.hasPrefix("#") || trimmed.hasPrefix("&") ? trimmed : "#\(trimmed)"
-		Task { try? await session.join(name) }
+		// Normalization (e.g. `linux` → `#linux`) lives on `IRCSession.join`,
+		// which is the single source of truth for every entry point.
+		Task { try? await session.join(trimmed) }
 		dismiss()
 	}
 }

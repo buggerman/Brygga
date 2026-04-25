@@ -42,6 +42,23 @@ final class IRCSessionTests: XCTestCase {
 		XCTAssertEqual(channel.messages.last?.kind, .join)
 	}
 
+	// MARK: - channel name normalization
+
+	func testNormalizedChannelNameAddsHashWhenMissing() {
+		XCTAssertEqual(IRCSession.normalizedChannelName("linux"), "#linux")
+	}
+
+	func testNormalizedChannelNamePreservesExistingPrefixes() {
+		XCTAssertEqual(IRCSession.normalizedChannelName("#linux"), "#linux")
+		XCTAssertEqual(IRCSession.normalizedChannelName("&local"), "&local")
+		XCTAssertEqual(IRCSession.normalizedChannelName("+modeless"), "+modeless")
+		XCTAssertEqual(IRCSession.normalizedChannelName("!safe"), "!safe")
+	}
+
+	func testNormalizedChannelNameTrimsWhitespace() {
+		XCTAssertEqual(IRCSession.normalizedChannelName("  linux  "), "#linux")
+	}
+
 	// MARK: - chathistory
 
 	func testServerDefaultsToChathistoryUnsupported() {
