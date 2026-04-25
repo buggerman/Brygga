@@ -37,7 +37,7 @@ struct BryggaApp: App {
 			ContentView()
 				.environment(appState)
 				.frame(minWidth: 900, minHeight: 600)
-				.containerBackground(.thinMaterial, for: .window)
+				.containerBackground(.regularMaterial, for: .window)
 				.onAppear { appDelegate.appState = appState }
 		}
 		.windowStyle(.titleBar)
@@ -103,7 +103,7 @@ struct BryggaApp: App {
 				DetachedChannelView(channelID: id)
 					.environment(appState)
 					.frame(minWidth: 600, minHeight: 400)
-					.containerBackground(.thinMaterial, for: .window)
+					.containerBackground(.regularMaterial, for: .window)
 			}
 		}
 
