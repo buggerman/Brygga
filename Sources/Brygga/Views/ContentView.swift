@@ -1883,6 +1883,7 @@ struct ChannelListSheet: View {
 struct UserListView: View {
 	@Environment(AppState.self) private var appState
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
+	@State private var selectedUserID: User.ID?
 
 	private func color(for nick: String) -> Color {
 		nickColorsEnabled ? NickColor.color(for: nick) : .primary
@@ -1890,7 +1891,7 @@ struct UserListView: View {
 
 	var body: some View {
 		if let channel = appState.selectedChannel, !channel.users.isEmpty {
-			List(channel.users) { user in
+			List(channel.users, selection: $selectedUserID) { user in
 				HStack {
 					Text(user.prefix)
 						.foregroundStyle(.secondary)
@@ -1907,6 +1908,7 @@ struct UserListView: View {
 					userRowMenu(for: user.nickname, channelName: channel.name)
 				}
 			}
+			.onChange(of: channel.id) { selectedUserID = nil }
 		} else {
 			ContentUnavailableView("No Users", systemImage: "person.2")
 		}
