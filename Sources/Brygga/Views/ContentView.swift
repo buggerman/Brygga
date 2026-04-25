@@ -1892,6 +1892,8 @@ struct UserListView: View {
 						.foregroundStyle(color(for: user.nickname))
 				}
 				.listRowSeparator(.hidden)
+				.contentShape(Rectangle())
+				.onTapGesture(count: 2) { query(user.nickname) }
 				.contextMenu {
 					userRowMenu(for: user.nickname, channelName: channel.name)
 				}
