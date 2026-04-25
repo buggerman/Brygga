@@ -732,6 +732,16 @@ public final class IRCSession {
 		}
 	}
 
+	/// Resolves the configured CHATHISTORY page size, falling back to the
+	/// shipped default when the pref is unset. Clamped to `1...500` —
+	/// most IRCv3 servers accept up to ~1000 per `BEFORE`, but 500 keeps
+	/// a single round-trip responsive even on slow networks.
+	public static func chathistoryPageSize() -> Int {
+		let raw = UserDefaults.standard.object(forKey: PreferencesKeys.chathistoryPageSize) as? Int
+			?? PreferencesKeys.chathistoryPageSizeFallback
+		return max(1, min(500, raw))
+	}
+
 	/// Public entry point for the lazy "load older messages" affordance.
 	/// Triggered by `MessageBufferView`'s scroll-near-top observer.
 	/// Idempotent under concurrent calls — the in-flight guard on
@@ -740,7 +750,7 @@ public final class IRCSession {
 	public func requestMoreHistory(for channel: Channel) {
 		guard channel.hasMoreHistoryAbove, !channel.isLoadingHistory else { return }
 		let key = channel.name.lowercased()
-		let limit = 50
+		let limit = Self.chathistoryPageSize()
 		// Anchor BEFORE on the oldest known msgid when we have one, falling
 		// back to the oldest message's server-time when we only have a
 		// timestamp, falling back to `*` (server picks "right now") when

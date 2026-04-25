@@ -19,12 +19,51 @@ struct PreferencesView: View {
 				.tabItem { Label("Notifications", systemImage: "bell") }
 			IgnorePane()
 				.tabItem { Label("Ignore", systemImage: "hand.raised") }
+			HistoryPane()
+				.tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
 			LoggingPane()
 				.tabItem { Label("Logging", systemImage: "doc.text") }
 			ServersPane()
 				.tabItem { Label("Servers", systemImage: "server.rack") }
 		}
 		.frame(width: 600, height: 440)
+	}
+}
+
+// MARK: - History
+
+/// Knobs for the IRCv3 CHATHISTORY backfill that drives the
+/// "Load earlier messages" affordance above the chat buffer.
+struct HistoryPane: View {
+	@AppStorage(PreferencesKeys.chathistoryPageSize) private var pageSize: Int =
+		PreferencesKeys.chathistoryPageSizeFallback
+
+	private static let options = [50, 100, 250, 500]
+
+	var body: some View {
+		Form {
+			Section {
+				Picker("Messages per request", selection: $pageSize) {
+					ForEach(Self.options, id: \.self) { value in
+						Text("\(value)").tag(value)
+					}
+				}
+			} footer: {
+				Text("Controls how many older messages Brygga asks the server for each time you click \u{201C}Load earlier messages\u{201D} or scroll to the top of a channel. Larger values mean fewer round-trips at the cost of slower individual responses.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			Section {
+				LabeledContent("Server support") {
+					Text("Detected automatically — only servers that negotiate the IRCv3 chathistory capability show the affordance. soju, ergo, and most modern bouncers support it; classic ircds typically do not.")
+						.font(.caption)
+						.foregroundStyle(.secondary)
+						.fixedSize(horizontal: false, vertical: true)
+				}
+			}
+		}
+		.formStyle(.grouped)
+		.padding()
 	}
 }
 
