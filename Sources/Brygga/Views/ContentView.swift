@@ -924,15 +924,40 @@ struct MessageList: View {
 	}
 
 	var body: some View {
-		MessageBufferView(
-			messages: visibleMessages,
-			lastReadMessageID: effectiveLastReadID,
-			nickColorsEnabled: nickColorsEnabled,
-			timestampFormat: timestampFormat,
-			linkPreviewsEnabled: linkPreviewsEnabled,
-			linkPreviews: appState.linkPreviews,
-			collapsePresenceRuns: effectiveCollapse,
-		)
+		VStack(spacing: 0) {
+			if channel.isLoadingHistory {
+				HistoryLoadingBanner()
+			}
+			MessageBufferView(
+				messages: visibleMessages,
+				lastReadMessageID: effectiveLastReadID,
+				nickColorsEnabled: nickColorsEnabled,
+				timestampFormat: timestampFormat,
+				linkPreviewsEnabled: linkPreviewsEnabled,
+				linkPreviews: appState.linkPreviews,
+				collapsePresenceRuns: effectiveCollapse,
+				onScrollNearTop: { appState.requestMoreHistory(for: channel) },
+			)
+		}
+	}
+}
+
+/// Thin top-of-buffer banner shown while a `CHATHISTORY BEFORE`
+/// request is in flight. Uses stock SwiftUI primitives + the regular
+/// material so it sits naturally above the chat surface.
+private struct HistoryLoadingBanner: View {
+	var body: some View {
+		HStack(spacing: 8) {
+			ProgressView()
+				.controlSize(.small)
+			Text("Loading older messages\u{2026}")
+				.font(.caption)
+				.foregroundStyle(.secondary)
+			Spacer()
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 6)
+		.background(.regularMaterial)
 	}
 }
 
