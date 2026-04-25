@@ -59,6 +59,27 @@ final class IRCSessionTests: XCTestCase {
 		XCTAssertEqual(IRCSession.normalizedChannelName("  linux  "), "#linux")
 	}
 
+	// MARK: - chathistory page size
+
+	func testChathistoryPageSizeFallsBackToShippedDefault() {
+		UserDefaults.standard.removeObject(forKey: PreferencesKeys.chathistoryPageSize)
+		XCTAssertEqual(IRCSession.chathistoryPageSize(), PreferencesKeys.chathistoryPageSizeFallback)
+	}
+
+	func testChathistoryPageSizeHonorsConfiguredValue() {
+		UserDefaults.standard.set(250, forKey: PreferencesKeys.chathistoryPageSize)
+		defer { UserDefaults.standard.removeObject(forKey: PreferencesKeys.chathistoryPageSize) }
+		XCTAssertEqual(IRCSession.chathistoryPageSize(), 250)
+	}
+
+	func testChathistoryPageSizeClampsOutOfRange() {
+		UserDefaults.standard.set(99999, forKey: PreferencesKeys.chathistoryPageSize)
+		XCTAssertEqual(IRCSession.chathistoryPageSize(), 500)
+		UserDefaults.standard.set(0, forKey: PreferencesKeys.chathistoryPageSize)
+		XCTAssertEqual(IRCSession.chathistoryPageSize(), 1)
+		UserDefaults.standard.removeObject(forKey: PreferencesKeys.chathistoryPageSize)
+	}
+
 	// MARK: - chathistory
 
 	func testServerDefaultsToChathistoryUnsupported() {

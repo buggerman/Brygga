@@ -57,4 +57,16 @@ public enum PreferencesKeys {
 	/// and stores a `Bool`. Once set, the banner stays hidden across launches
 	/// for that server even if the bouncer keeps advertising new networks.
 	public static let bouncerOnboardingDismissedPrefix = "brygga.bouncerOnboarding.dismissed."
+
+	/// Number of messages requested per `CHATHISTORY BEFORE` round-trip when
+	/// the user hits "Load earlier messages" (or scrolls to the top, which
+	/// fires the same code path). Default: 50. Resolved through
+	/// `IRCSession.chathistoryPageSize()`, which clamps to `1...500` to stay
+	/// within typical server caps.
+	public static let chathistoryPageSize = "brygga.chathistoryPageSize"
+
+	/// Default for `chathistoryPageSize`. Matches the original hardcoded
+	/// limit, so users who never visit the History pane keep today's
+	/// behavior.
+	public static let chathistoryPageSizeFallback = 50
 }
