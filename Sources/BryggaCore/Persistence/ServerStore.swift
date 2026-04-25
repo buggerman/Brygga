@@ -34,12 +34,17 @@ public enum ServerStore {
 		/// explicit override (true = collapse, false = don't collapse).
 		/// Missing keys or a nil map mean "inherit the global default".
 		public var channelPresenceCollapse: [String: Bool]?
+		/// Per-channel IRCv3 `msgid` of the most-recent message Brygga
+		/// has observed, keyed by lowercased channel name. Anchors
+		/// `CHATHISTORY AFTER` on reconnect / cold start so the server
+		/// replays only what we missed while disconnected.
+		public var channelLastSeenMsgID: [String: String]?
 
 		enum CodingKeys: String, CodingKey {
 			case id, name, host, port, useTLS, nickname, autoJoinChannels, openQueries,
 			     saslAccount, saslPassword, ignoreList, notifyList, performCommands,
 			     pinnedChannels, clientCertificatePath, clientCertificatePassphrase,
-			     channelPresenceCollapse
+			     channelPresenceCollapse, channelLastSeenMsgID
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -66,6 +71,7 @@ public enum ServerStore {
 			clientCertificatePath = try c.decodeIfPresent(String.self, forKey: .clientCertificatePath)
 			clientCertificatePassphrase = try c.decodeIfPresent(String.self, forKey: .clientCertificatePassphrase)
 			channelPresenceCollapse = try c.decodeIfPresent([String: Bool].self, forKey: .channelPresenceCollapse)
+			channelLastSeenMsgID = try c.decodeIfPresent([String: String].self, forKey: .channelLastSeenMsgID)
 		}
 
 		/// Custom encode deliberately skips `saslPassword` and
@@ -90,6 +96,7 @@ public enum ServerStore {
 			try c.encodeIfPresent(clientCertificatePath, forKey: .clientCertificatePath)
 			// saslPassword and clientCertificatePassphrase: intentionally omitted.
 			try c.encodeIfPresent(channelPresenceCollapse, forKey: .channelPresenceCollapse)
+			try c.encodeIfPresent(channelLastSeenMsgID, forKey: .channelLastSeenMsgID)
 		}
 
 		public init(
@@ -110,6 +117,7 @@ public enum ServerStore {
 			clientCertificatePath: String? = nil,
 			clientCertificatePassphrase: String? = nil,
 			channelPresenceCollapse: [String: Bool]? = nil,
+			channelLastSeenMsgID: [String: String]? = nil,
 		) {
 			self.id = id
 			self.name = name
@@ -128,6 +136,7 @@ public enum ServerStore {
 			self.clientCertificatePath = clientCertificatePath
 			self.clientCertificatePassphrase = clientCertificatePassphrase
 			self.channelPresenceCollapse = channelPresenceCollapse
+			self.channelLastSeenMsgID = channelLastSeenMsgID
 		}
 	}
 
