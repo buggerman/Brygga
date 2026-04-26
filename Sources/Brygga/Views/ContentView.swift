@@ -202,12 +202,9 @@ struct ServerRow: View {
 			}
 			.buttonStyle(.plain)
 
-			Circle()
-				.fill(stateColor)
-				.frame(width: 8, height: 8)
 			Image(systemName: serverIconName)
 				.font(.system(size: 13))
-				.foregroundStyle(.secondary)
+				.foregroundStyle(stateColor)
 			Text(server.name)
 				.font(.system(size: 12, weight: .semibold))
 			if server.isAway {
