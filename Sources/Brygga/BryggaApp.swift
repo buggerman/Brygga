@@ -30,7 +30,11 @@ final class BryggaAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct BryggaApp: App {
 	@NSApplicationDelegateAdaptor(BryggaAppDelegate.self) private var appDelegate
-	@State private var appState = AppState(store: .shared)
+	@State private var appState = AppState(
+		store: .shared,
+		scrollbackStore: .shared,
+		scrollbackIndex: .shared,
+	)
 
 	var body: some Scene {
 		Window("Brygga", id: "main") {
