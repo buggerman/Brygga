@@ -52,9 +52,24 @@ public final class IRCSession {
 	/// by token string → send timestamp. Used to derive `Server.lag`.
 	private var pendingPings: [String: Date] = [:]
 
-	public init(server: Server, connection: IRCConnection) {
+	/// Per-channel JSONL scrollback store. Production code passes
+	/// `ScrollbackStore.shared`; tests pass a tempdir-rooted instance so a
+	/// `swift test` run never appends to the user's real scrollback.
+	private let scrollbackStore: ScrollbackStore
+
+	/// SQLite/FTS5 search index. Same injection rule as `scrollbackStore`.
+	private let scrollbackIndex: ScrollbackIndex
+
+	public init(
+		server: Server,
+		connection: IRCConnection,
+		scrollbackStore: ScrollbackStore,
+		scrollbackIndex: ScrollbackIndex,
+	) {
 		self.server = server
 		self.connection = connection
+		self.scrollbackStore = scrollbackStore
+		self.scrollbackIndex = scrollbackIndex
 	}
 
 	// MARK: - Lifecycle
@@ -336,8 +351,10 @@ public final class IRCSession {
 		channel.scrollbackLoaded = true
 		let sid = server.id
 		let target = channel.name
+		let store = scrollbackStore
+		let index = scrollbackIndex
 		Task { [weak channel] in
-			let msgs = await ScrollbackStore.shared.load(serverId: sid, target: target)
+			let msgs = await store.load(serverId: sid, target: target)
 			guard let channel, !msgs.isEmpty else { return }
 			await MainActor.run {
 				channel.messages.insert(contentsOf: msgs, at: 0)
@@ -346,7 +363,7 @@ public final class IRCSession {
 			// reply, openQuery, incoming PM). `index` is idempotent on
 			// `msg_id` so on-line writes for the same channel are safe.
 			for msg in msgs {
-				await ScrollbackIndex.shared.index(msg, serverID: sid, target: target)
+				await index.index(msg, serverID: sid, target: target)
 			}
 		}
 	}
@@ -357,9 +374,11 @@ public final class IRCSession {
 		channel.messages.append(message)
 		let sid = server.id
 		let target = channel.name
+		let store = scrollbackStore
+		let index = scrollbackIndex
 		Task {
-			await ScrollbackStore.shared.append(serverId: sid, target: target, message: message)
-			await ScrollbackIndex.shared.index(message, serverID: sid, target: target)
+			await store.append(serverId: sid, target: target, message: message)
+			await index.index(message, serverID: sid, target: target)
 		}
 		logToDiskIfEnabled(message, target: target)
 	}
@@ -368,9 +387,11 @@ public final class IRCSession {
 	public func recordServer(_ message: Message) {
 		server.messages.append(message)
 		let sid = server.id
+		let store = scrollbackStore
+		let index = scrollbackIndex
 		Task {
-			await ScrollbackStore.shared.append(serverId: sid, target: "__server__", message: message)
-			await ScrollbackIndex.shared.index(message, serverID: sid, target: "__server__")
+			await store.append(serverId: sid, target: "__server__", message: message)
+			await index.index(message, serverID: sid, target: "__server__")
 		}
 		logToDiskIfEnabled(message, target: "server")
 	}
@@ -870,14 +891,16 @@ public final class IRCSession {
 			}
 			let sid = server.id
 			let target = ctx.target
+			let store = scrollbackStore
+			let index = scrollbackIndex
 			Task {
 				for msg in novel {
-					await ScrollbackStore.shared.append(
+					await store.append(
 						serverId: sid,
 						target: target,
 						message: msg,
 					)
-					await ScrollbackIndex.shared.index(msg, serverID: sid, target: target)
+					await index.index(msg, serverID: sid, target: target)
 				}
 			}
 		}
