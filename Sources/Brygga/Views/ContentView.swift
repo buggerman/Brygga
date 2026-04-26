@@ -2004,6 +2004,13 @@ struct UserListView: View {
 	@Environment(AppState.self) private var appState
 	@AppStorage(PreferencesKeys.nickColorsEnabled) private var nickColorsEnabled = true
 	@State private var selectedUserID: User.ID?
+	// Manual double-click detector. Single-tap is the only SwiftUI gesture
+	// we attach so the system never defers the click waiting to see if a
+	// second one is coming — that deferral is what made `simultaneousGesture(
+	// TapGesture(count: 2))` feel flaky on busy channels where MODE / AWAY
+	// updates re-render rows mid-click.
+	@State private var lastClickedID: User.ID?
+	@State private var lastClickedAt: Date?
 
 	private func color(for nick: String) -> Color {
 		nickColorsEnabled ? NickColor.color(for: nick) : .primary
@@ -2023,21 +2030,39 @@ struct UserListView: View {
 				}
 				.listRowSeparator(.hidden)
 				.contentShape(Rectangle())
-				// `simultaneousGesture` instead of `onTapGesture` so the
-				// double-click recognizer doesn't compete with the native
-				// `List(selection:)` single-click. With `onTapGesture(count: 2)`
-				// SwiftUI defers the first tap waiting for a possible second,
-				// which makes single-click selection feel flaky.
-				.simultaneousGesture(
-					TapGesture(count: 2).onEnded { query(user.nickname) },
-				)
+				.onTapGesture { handleClick(on: user) }
 				.contextMenu {
 					userRowMenu(for: user.nickname, channelName: channel.name)
 				}
 			}
-			.onChange(of: channel.id) { selectedUserID = nil }
+			.onChange(of: channel.id) {
+				selectedUserID = nil
+				lastClickedID = nil
+				lastClickedAt = nil
+			}
 		} else {
 			ContentUnavailableView("No Users", systemImage: "person.2")
+		}
+	}
+
+	/// Single-click selects, second click on the same row inside the OS
+	/// double-click interval opens the PM. Mirrors what `NSTableView`
+	/// does internally — no competing SwiftUI gesture recognizers, so the
+	/// first click is never deferred.
+	private func handleClick(on user: User) {
+		let now = Date()
+		let interval = NSEvent.doubleClickInterval
+		if lastClickedID == user.id,
+		   let lastAt = lastClickedAt,
+		   now.timeIntervalSince(lastAt) < interval
+		{
+			query(user.nickname)
+			lastClickedID = nil
+			lastClickedAt = nil
+		} else {
+			selectedUserID = user.id
+			lastClickedID = user.id
+			lastClickedAt = now
 		}
 	}
 
