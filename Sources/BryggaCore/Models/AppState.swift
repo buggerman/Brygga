@@ -69,8 +69,25 @@ public final class AppState {
 	/// production data wipe.
 	private let store: ServerStore
 
-	public init(store: ServerStore) {
+	/// Per-channel JSONL scrollback store. Same injection rule as `store`
+	/// — every constructed `IRCSession` gets this so test sessions don't
+	/// trickle into the user's real `scrollback/` directory.
+	private let scrollbackStore: ScrollbackStore
+
+	/// FTS5 search index. Same injection rule. Read-only `search` in the
+	/// UI still uses `ScrollbackIndex.shared` directly because UI is
+	/// production-only; the injection is purely about isolating writes
+	/// from tests.
+	private let scrollbackIndex: ScrollbackIndex
+
+	public init(
+		store: ServerStore,
+		scrollbackStore: ScrollbackStore,
+		scrollbackIndex: ScrollbackIndex,
+	) {
 		self.store = store
+		self.scrollbackStore = scrollbackStore
+		self.scrollbackIndex = scrollbackIndex
 		restoreFromStore()
 		requestNotificationPermission()
 	}
@@ -204,11 +221,13 @@ public final class AppState {
 			// Each loaded message is also fed into the FTS5 index using the
 			// canonical channel name — this is the cold-start backfill path,
 			// done lazily through the existing rehydrate loop instead of a
-			// separate filesystem walker. `ScrollbackIndex.index` is
-			// idempotent on `msg_id`, so on-line writes that ran first
-			// won't be double-counted.
+			// separate filesystem walker. The index is idempotent on
+			// `msg_id`, so on-line writes that ran first won't be
+			// double-counted.
+			let scrollback = scrollbackStore
+			let index = scrollbackIndex
 			Task { [server] in
-				let serverMessages = await ScrollbackStore.shared.load(
+				let serverMessages = await scrollback.load(
 					serverId: server.id,
 					target: "__server__",
 				)
@@ -216,10 +235,10 @@ public final class AppState {
 					server.messages.insert(contentsOf: serverMessages, at: 0)
 				}
 				for msg in serverMessages {
-					await ScrollbackIndex.shared.index(msg, serverID: server.id, target: "__server__")
+					await index.index(msg, serverID: server.id, target: "__server__")
 				}
 				for channel in server.channels {
-					let msgs = await ScrollbackStore.shared.load(
+					let msgs = await scrollback.load(
 						serverId: server.id,
 						target: channel.name,
 					)
@@ -228,7 +247,7 @@ public final class AppState {
 						channel.scrollbackLoaded = true
 					}
 					for msg in msgs {
-						await ScrollbackIndex.shared.index(
+						await index.index(
 							msg,
 							serverID: server.id,
 							target: channel.name,
@@ -313,7 +332,8 @@ public final class AppState {
 		if selection == channelID {
 			selection = server.id
 		}
-		Task { await ScrollbackIndex.shared.clear(serverID: serverID, target: closedTarget) }
+		let index = scrollbackIndex
+		Task { await index.clear(serverID: serverID, target: closedTarget) }
 		persist()
 	}
 
@@ -451,7 +471,12 @@ public final class AppState {
 			clientCertificatePassphrase: clientCertificatePassphrase,
 			bouncerNetID: bouncerNetID,
 		)
-		let session = IRCSession(server: server, connection: connection)
+		let session = IRCSession(
+			server: server,
+			connection: connection,
+			scrollbackStore: scrollbackStore,
+			scrollbackIndex: scrollbackIndex,
+		)
 		session.autoJoinChannels = autoJoinChannels
 		session.onChannelsChanged = { [weak self] in self?.persist() }
 		session.onHighlight = { [weak self] channel, message in
@@ -606,7 +631,8 @@ public final class AppState {
 		if selection == id {
 			selection = nil
 		}
-		Task { await ScrollbackIndex.shared.clear(serverID: id) }
+		let index = scrollbackIndex
+		Task { await index.clear(serverID: id) }
 		persist()
 	}
 }

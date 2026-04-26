@@ -9,7 +9,17 @@ final class IRCSessionTests: XCTestCase {
 	private func makeSession(ownNick: String = "me") -> IRCSession {
 		let server = Server(name: "Test", host: "irc.example.org", nickname: ownNick)
 		let connection = IRCConnection(host: "irc.example.org", nickname: ownNick)
-		return IRCSession(server: server, connection: connection)
+		// Tempdir-rooted scrollback store so `record(_:in:)` calls during
+		// the test can't append to the user's real `~/Library/Application
+		// Support/Brygga/scrollback/`. `:memory:` SQLite for the index.
+		let dir = FileManager.default.temporaryDirectory
+			.appendingPathComponent("BryggaTests-\(UUID().uuidString)", isDirectory: true)
+		return IRCSession(
+			server: server,
+			connection: connection,
+			scrollbackStore: ScrollbackStore(root: dir),
+			scrollbackIndex: ScrollbackIndex(path: ":memory:"),
+		)
 	}
 
 	private func parse(_ line: String) -> IRCLineParserResult {

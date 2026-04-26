@@ -6,19 +6,40 @@ import XCTest
 
 @MainActor
 final class AppStateNavigationTests: XCTestCase {
-	/// Build a `ServerStore` rooted at a unique temp directory. Critical
-	/// for isolation: the production singleton would share the user's real
-	/// `~/Library/Application Support/Brygga/servers.json`, and any test
-	/// mutation that triggers `persist()` (e.g. `closePrivateMessage`)
-	/// would overwrite that file with the test fixture data.
-	private func makeStore() -> ServerStore {
+	/// Build a tempdir-rooted set of stores. Critical for isolation: the
+	/// production singletons would share the user's real
+	/// `~/Library/Application Support/Brygga/{servers.json,scrollback/,scrollback.sqlite}`,
+	/// and any test mutation that triggers a write would land there. The
+	/// recovery script (`Scripts/recover-scrollback.sh`) was written to
+	/// dig users out of exactly that hole.
+	private struct TestDeps {
+		let server: ServerStore
+		let scrollback: ScrollbackStore
+		let scrollbackIndex: ScrollbackIndex
+	}
+
+	private func makeDeps() -> TestDeps {
 		let dir = FileManager.default.temporaryDirectory
 			.appendingPathComponent("BryggaTests-\(UUID().uuidString)", isDirectory: true)
-		return ServerStore(root: dir)
+		return TestDeps(
+			server: ServerStore(root: dir),
+			scrollback: ScrollbackStore(root: dir.appendingPathComponent("scrollback", isDirectory: true)),
+			scrollbackIndex: ScrollbackIndex(path: ":memory:"),
+		)
+	}
+
+	/// Convenience for tests that only need the `ServerStore`.
+	private func makeStore() -> ServerStore {
+		makeDeps().server
 	}
 
 	private func makeFixture() -> AppState {
-		let state = AppState(store: makeStore())
+		let deps = makeDeps()
+		let state = AppState(
+			store: deps.server,
+			scrollbackStore: deps.scrollback,
+			scrollbackIndex: deps.scrollbackIndex,
+		)
 		state.servers.removeAll()
 		state.selection = nil
 		let s1 = Server(name: "ServerA", host: "a.example.org", nickname: "me")
@@ -95,7 +116,12 @@ final class AppStateNavigationTests: XCTestCase {
 	}
 
 	func testEmptyStateIsNoOp() {
-		let state = AppState(store: makeStore())
+		let deps = makeDeps()
+		let state = AppState(
+			store: deps.server,
+			scrollbackStore: deps.scrollback,
+			scrollbackIndex: deps.scrollbackIndex,
+		)
 		state.servers.removeAll()
 		state.selection = nil
 		state.selectAdjacentChannel(direction: 1)
@@ -106,11 +132,15 @@ final class AppStateNavigationTests: XCTestCase {
 	/// `persist()` must write to the injected store's path, not to the
 	/// production `~/Library/Application Support/Brygga/servers.json`.
 	func testPersistWritesToInjectedStoreNotProduction() {
-		let dir = FileManager.default.temporaryDirectory
-			.appendingPathComponent("BryggaTests-\(UUID().uuidString)", isDirectory: true)
-		let store = ServerStore(root: dir)
-		let state = AppState(store: store)
+		let deps = makeDeps()
+		let state = AppState(
+			store: deps.server,
+			scrollbackStore: deps.scrollback,
+			scrollbackIndex: deps.scrollbackIndex,
+		)
 		state.servers.removeAll()
+		// Convenience handles for the assertions below.
+		let store = deps.server
 
 		let pm = Channel(name: "carol")
 		let owner = Server(name: "Test", host: "irc.example.org", nickname: "me")
