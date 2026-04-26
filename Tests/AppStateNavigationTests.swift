@@ -6,8 +6,19 @@ import XCTest
 
 @MainActor
 final class AppStateNavigationTests: XCTestCase {
+	/// Build a `ServerStore` rooted at a unique temp directory. Critical
+	/// for isolation: the production singleton would share the user's real
+	/// `~/Library/Application Support/Brygga/servers.json`, and any test
+	/// mutation that triggers `persist()` (e.g. `closePrivateMessage`)
+	/// would overwrite that file with the test fixture data.
+	private func makeStore() -> ServerStore {
+		let dir = FileManager.default.temporaryDirectory
+			.appendingPathComponent("BryggaTests-\(UUID().uuidString)", isDirectory: true)
+		return ServerStore(root: dir)
+	}
+
 	private func makeFixture() -> AppState {
-		let state = AppState()
+		let state = AppState(store: makeStore())
 		state.servers.removeAll()
 		state.selection = nil
 		let s1 = Server(name: "ServerA", host: "a.example.org", nickname: "me")
@@ -84,10 +95,35 @@ final class AppStateNavigationTests: XCTestCase {
 	}
 
 	func testEmptyStateIsNoOp() {
-		let state = AppState()
+		let state = AppState(store: makeStore())
 		state.servers.removeAll()
 		state.selection = nil
 		state.selectAdjacentChannel(direction: 1)
 		XCTAssertNil(state.selection)
+	}
+
+	/// Regression for the test-pollution bug: a test that triggers
+	/// `persist()` must write to the injected store's path, not to the
+	/// production `~/Library/Application Support/Brygga/servers.json`.
+	func testPersistWritesToInjectedStoreNotProduction() {
+		let dir = FileManager.default.temporaryDirectory
+			.appendingPathComponent("BryggaTests-\(UUID().uuidString)", isDirectory: true)
+		let store = ServerStore(root: dir)
+		let state = AppState(store: store)
+		state.servers.removeAll()
+
+		let pm = Channel(name: "carol")
+		let owner = Server(name: "Test", host: "irc.example.org", nickname: "me")
+		owner.channels = [pm]
+		state.servers = [owner]
+		state.selection = pm.id
+		state.closePrivateMessage(channelID: pm.id)
+
+		// File exists under the injected store's path...
+		XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL.path))
+		// ...and contains the post-mutation snapshot.
+		let snapshot = store.load()
+		XCTAssertEqual(snapshot.servers.count, 1)
+		XCTAssertEqual(snapshot.servers.first?.openQueries, [])
 	}
 }

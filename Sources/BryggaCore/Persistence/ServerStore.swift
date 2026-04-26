@@ -3,10 +3,55 @@
 
 import Foundation
 
-/// Loads and saves the list of configured servers to
-/// `~/Library/Application Support/Brygga/servers.json`.
-public enum ServerStore {
-	public struct ServerConfig: Codable, Equatable {
+/// Loads and saves the list of configured servers as JSON. The default
+/// instance reads/writes `~/Library/Application Support/Brygga/servers.json`;
+/// tests construct their own `ServerStore(root: tempDir)` so they never touch
+/// the user's real config. `AppState` requires a store to be passed in
+/// explicitly — there is no `AppState()` default — so a test that forgets
+/// to inject a temp store is a compile error rather than a silent prod
+/// overwrite.
+public final class ServerStore: Sendable {
+	/// Default singleton, anchored at the production path. Used by the app
+	/// executable; tests must construct their own instance.
+	public static let shared = ServerStore()
+
+	private let url: URL
+
+	/// `root` is the directory that holds `servers.json`. `nil` resolves to
+	/// the standard `~/Library/Application Support/Brygga/` location.
+	public init(root: URL? = nil) {
+		let dir: URL = if let root {
+			root
+		} else {
+			(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+				?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support"))
+				.appendingPathComponent("Brygga", isDirectory: true)
+		}
+		try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		url = dir.appendingPathComponent("servers.json")
+	}
+
+	/// Absolute path of the backing JSON file. Useful for diagnostics and
+	/// for the recovery utility.
+	public var fileURL: URL {
+		url
+	}
+
+	public func load() -> Snapshot {
+		guard let data = try? Data(contentsOf: url) else {
+			return Snapshot(servers: [])
+		}
+		return (try? JSONDecoder().decode(Snapshot.self, from: data)) ?? Snapshot(servers: [])
+	}
+
+	public func save(_ snapshot: Snapshot) {
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+		guard let data = try? encoder.encode(snapshot) else { return }
+		try? data.write(to: url, options: .atomic)
+	}
+
+	public struct ServerConfig: Codable, Equatable, Sendable {
 		/// Stable identifier for this server across launches. Keys the
 		/// scrollback directory on disk (`scrollback/<id>/<target>.log`)
 		/// so message history survives relaunches. `nil` when migrating
@@ -152,31 +197,7 @@ public enum ServerStore {
 		}
 	}
 
-	public struct Snapshot: Codable, Equatable {
+	public struct Snapshot: Codable, Equatable, Sendable {
 		public var servers: [ServerConfig]
-	}
-
-	public static func fileURL() -> URL {
-		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-		let dir = base.appendingPathComponent("Brygga", isDirectory: true)
-		try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-		return dir.appendingPathComponent("servers.json")
-	}
-
-	public static func load() -> Snapshot {
-		let url = fileURL()
-		guard let data = try? Data(contentsOf: url) else {
-			return Snapshot(servers: [])
-		}
-		return (try? JSONDecoder().decode(Snapshot.self, from: data)) ?? Snapshot(servers: [])
-	}
-
-	public static func save(_ snapshot: Snapshot) {
-		let url = fileURL()
-		let encoder = JSONEncoder()
-		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-		guard let data = try? encoder.encode(snapshot) else { return }
-		try? data.write(to: url, options: .atomic)
 	}
 }
