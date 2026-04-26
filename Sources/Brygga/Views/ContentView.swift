@@ -122,7 +122,11 @@ struct SidebarView: View {
 							ForEach(server.channels) { channel in
 								ChannelRow(channel: channel)
 									.tag(Optional(channel.id))
-									.padding(.leading, 12)
+									// Match the server row's `chevron(12) + spacing(6)` so
+									// the channel icon column lines up vertically with the
+									// server's antenna icon. Otherwise the icons drift 6pt
+									// out of alignment and the sidebar looks staggered.
+									.padding(.leading, 18)
 									.contextMenu {
 										Button(channel.isPinned ? "Unpin" : "Pin to Favorites") {
 											appState.togglePin(channelID: channel.id)
