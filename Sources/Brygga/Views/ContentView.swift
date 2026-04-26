@@ -205,6 +205,9 @@ struct ServerRow: View {
 			Circle()
 				.fill(stateColor)
 				.frame(width: 8, height: 8)
+			Image(systemName: serverIconName)
+				.font(.system(size: 13))
+				.foregroundStyle(.secondary)
 			Text(server.name)
 				.font(.system(size: 12, weight: .semibold))
 			if server.isAway {
@@ -241,6 +244,16 @@ struct ServerRow: View {
 		case .disconnected: .gray
 		}
 	}
+
+	/// Slash variant only at the stable `.disconnected` terminal state. The
+	/// transient `.connecting` / `.disconnecting` states keep the active
+	/// icon — slashing during a connect-in-progress would feel wrong; the
+	/// dot color carries the transient signal.
+	private var serverIconName: String {
+		server.state == .disconnected
+			? "antenna.radiowaves.left.and.right.slash.circle.fill"
+			: "antenna.radiowaves.left.and.right.circle.fill"
+	}
 }
 
 struct ChannelRow: View {
@@ -249,6 +262,9 @@ struct ChannelRow: View {
 
 	var body: some View {
 		HStack {
+			Image(systemName: channel.isPrivateMessage ? "person.crop.circle.fill" : "number.circle.fill")
+				.font(.system(size: 13))
+				.foregroundStyle(.secondary)
 			VStack(alignment: .leading, spacing: 0) {
 				Text(channel.name)
 					.lineLimit(1)
