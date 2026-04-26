@@ -61,7 +61,16 @@ public final class AppState {
 	/// is gated at the call site via `PreferencesKeys.linkPreviewsEnabled`.
 	public let linkPreviews = LinkPreviewStore()
 
-	public init() {
+	/// Backing store for `servers.json`. Production passes
+	/// `ServerStore.shared`; tests pass a `ServerStore(root: tempDir)` so
+	/// they never overwrite the user's real config. There is **no**
+	/// `AppState()` default — every caller must be explicit, which makes
+	/// "I forgot to use a temp store" a compile error rather than a silent
+	/// production data wipe.
+	private let store: ServerStore
+
+	public init(store: ServerStore) {
+		self.store = store
 		restoreFromStore()
 		requestNotificationPermission()
 	}
@@ -120,7 +129,7 @@ public final class AppState {
 	private var isRestoring: Bool = false
 
 	private func restoreFromStore() {
-		let snapshot = ServerStore.load()
+		let snapshot = store.load()
 		guard !snapshot.servers.isEmpty else { return }
 		isRestoring = true
 
@@ -280,7 +289,7 @@ public final class AppState {
 
 	private func persist() {
 		guard !isRestoring else { return }
-		ServerStore.save(snapshot())
+		store.save(snapshot())
 	}
 
 	/// Close a private-message tab. Removes the query channel from its
